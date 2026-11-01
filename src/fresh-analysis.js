@@ -137,20 +137,19 @@ export function buildFreshAnalysis({ id, filename, metadata, sam, wonder, savedA
   const assessment = parseWonderResult(wonder, metadata);
   const episodes = assessment.complete_observable_service_episodes;
   const verdict = assessment.suitability_verdict;
-  const eligibility = assessment.calibration_eligibility;
-  const hasPersonLevelQueueEvidence = episodes.some((episode) => Number.isInteger(episode.person_id) && Number.isFinite(episode.queue_join_seconds) && Number.isFinite(episode.service_start_seconds));
-  const calibrationEligible = eligibility.eligible === true && eligibility.traceable_queue === true && eligibility.traceable_timings === true && hasPersonLevelQueueEvidence && assessment.visible_service_positions.length > 0 && episodes.length > 0 && detections.length > 0;
+  const calibrationEligible = false;
+  const calibrationRationale = 'Fresh provider episodes are anonymous service proposals without person-level queue joins; review identity-linked waits before using timings for calibration.';
   const candidateEvents = episodes.flatMap((episode) => [
     { type: 'service-start', personId: null, timeSeconds: episode.start_seconds, continuity: 'unknown', role: 'unknown', membership: 'service', source: { kind: 'video', startSeconds: episode.start_seconds, endSeconds: episode.start_seconds } },
     { type: 'service-end', personId: null, timeSeconds: episode.end_seconds, continuity: 'unknown', role: 'unknown', membership: 'service', source: { kind: 'video', startSeconds: episode.end_seconds, endSeconds: episode.end_seconds } },
   ]);
-  const limitations = [assessment.camera_motion, assessment.queue_topology_and_uncertainty, ...assessment.occlusion_problems, ...assessment.measurements_not_supported, 'Provider service episodes have no person-level queue joins or machine-readable identity; review candidate proposals before using timings.', ...(!calibrationEligible ? ['Calibration eligibility is pending human review because traceable queue and timing evidence is incomplete.'] : [])].filter(Boolean);
+  const limitations = [assessment.camera_motion, assessment.queue_topology_and_uncertainty, ...assessment.occlusion_problems, ...assessment.measurements_not_supported, calibrationRationale].filter(Boolean);
   const analysis = {
     schemaVersion: 1, id, status: 'fresh',
     clip: { id, filename, durationSeconds: metadata.durationSeconds, width: metadata.width, height: metadata.height, sourceUrl: 'https://example.invalid/user-upload', licenseUrl: 'https://example.invalid/user-upload-rights', attribution: 'Uploaded by the user; media rights were not verified by Counterfactual.', videoUrl: `/api/analysis/uploads/${id}/video` },
     provenance: { analysisMode: 'fresh', savedAt, processedFps: metadata.processedFps, processedFrameCount: metadata.processedFrameCount, models: { segmentation: 'sam-3.1', interpretation: 'muse-wonder-1.0' } },
     detections, candidateZones: [], candidateEvents, limitations, assessment: { ...assessment, complete_observable_service_episodes: episodes },
-    qualification: { verdict, calibrationEligible, rationale: calibrationEligible ? 'Structured evidence reports a visible queue and traceable timings; review every candidate event and identity before relying on it.' : `Calibration is not locally eligible: ${eligibility.rationale}` },
+    qualification: { verdict, calibrationEligible, rationale: calibrationRationale },
   };
   return validateAnalysis(analysis);
 }

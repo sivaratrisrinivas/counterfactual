@@ -104,6 +104,7 @@ test('structured qualifying evidence preserves identity-unknown service proposal
     assert.equal(result.upload.status, 'completed');
     assert.equal(result.upload.analysis.qualification.calibrationEligible, false);
     assert.deepEqual(result.upload.analysis.candidateEvents.map((event) => [event.type, event.timeSeconds, event.personId]), [['service-start', 1, null], ['service-end', 2, null]]);
+    assert.match(result.upload.analysis.qualification.rationale, /anonymous|person-level queue joins/i);
     assert.match(result.upload.analysis.limitations.join(' '), /identity/i);
   }, application);
 });
