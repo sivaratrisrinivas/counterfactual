@@ -1,4 +1,6 @@
-const state = { model: null, comparison: null };
+import { renderPlayback } from './playback.js';
+
+const state = { model: null, comparison: null, playback: null };
 const arrivalList = document.querySelector('#arrival-list');
 const modelForm = document.querySelector('#model-form');
 const reviewButton = document.querySelector('#review-button');
@@ -45,6 +47,8 @@ function renumberArrivals() {
 
 function markDraftChanged() {
   if (state.model) {
+    state.playback?.destroy();
+    state.playback = null;
     state.model.reviewed = false;
     reviewButton.disabled = true;
     document.querySelector('#review-tag').textContent = 'Inputs changed';
@@ -75,6 +79,8 @@ async function request(path, options = {}) {
 }
 
 function renderModel(model) {
+  state.playback?.destroy();
+  state.playback = null;
   state.model = model;
   state.comparison = null;
   window.dispatchEvent(new CustomEvent('counterfactual:model-updated', { detail: model }));
@@ -152,12 +158,14 @@ function formatSeconds(value) { return `${Number(value).toFixed(value % 1 ? 1 : 
 
 function renderComparison(comparison) {
   resultSection.hidden = false;
+  state.playback?.destroy();
+  state.playback = null;
   const reduction = comparison.baseline.meanWaitingTime - comparison.intervention.meanWaitingTime;
-  const reductionLabel = reduction >= 0 ? `${formatSeconds(reduction)} less` : `${formatSeconds(Math.abs(reduction))} more`;
+  const reductionLabel = reduction === 0 ? 'No change' : reduction > 0 ? `${formatSeconds(reduction)} less` : `${formatSeconds(Math.abs(reduction))} more`;
   document.querySelector('#metric-strip').innerHTML = `
     <div class="metric baseline-metric"><span>Baseline wait</span><strong>${formatSeconds(comparison.baseline.meanWaitingTime)}</strong><small>${comparison.baselinePositions} position${comparison.baselinePositions === 1 ? '' : 's'}</small></div>
     <div class="metric intervention-metric"><span>Intervention wait</span><strong>${formatSeconds(comparison.intervention.meanWaitingTime)}</strong><small>${comparison.interventionPositions} positions</small></div>
-    <div class="metric delta-metric"><span>Difference</span><strong>${reductionLabel}</strong><small>absolute change · model v${comparison.modelVersion}</small></div>`;
+    <div class="metric delta-metric"><span>Difference</span><strong>${reductionLabel}</strong><small>absolute difference · model v${comparison.modelVersion}</small></div>`;
   const maxQueue = Math.max(1, ...comparison.queueLengthTimelines.baseline.map((point) => point.queueLength), ...comparison.queueLengthTimelines.intervention.map((point) => point.queueLength));
   const times = [...new Set([...comparison.queueLengthTimelines.baseline, ...comparison.queueLengthTimelines.intervention].map((point) => point.time))].sort((a, b) => a - b);
   const queueAt = (timeline, time) => timeline.find((point) => point.time === time)?.queueLength ?? timeline.filter((point) => point.time < time).at(-1)?.queueLength ?? 0;
@@ -165,6 +173,7 @@ function renderComparison(comparison) {
   const serviceStarts = comparison.baseline.customers.map((customer, index) => `<div class="event-row"><span>${escapeHtml(customer.id)}</span><span class="event-baseline">${formatSeconds(customer.serviceStartTime)}</span><span class="event-intervention">${formatSeconds(comparison.intervention.customers[index].serviceStartTime)}</span></div>`).join('');
   document.querySelector('#event-table').innerHTML = `<div class="event-header"><span>Person</span><span>Base</span><span>What-if</span></div>${serviceStarts}`;
   document.querySelector('#result-assumption-list').innerHTML = comparison.assumptions.map((assumption) => `<span>${escapeHtml(assumption)}</span>`).join('');
+  state.playback = renderPlayback(comparison);
 }
 
 window.addEventListener('counterfactual:staffing-comparison', (event) => {

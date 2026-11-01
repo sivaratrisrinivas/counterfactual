@@ -7,6 +7,7 @@ import { StaffingWorkflow } from './staffing.js';
 
 const publicDirectory = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'public');
 const contentTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+const staticFiles = new Set(['index.html', 'app.js', 'staffing.js', 'playback.js', 'styles.css']);
 
 function sendJson(response, status, body) {
   const payload = JSON.stringify(body);
@@ -30,7 +31,7 @@ async function readJson(request) {
 
 async function serveStatic(response, pathname) {
   const relative = pathname === '/' ? 'index.html' : pathname.slice(1);
-  if (!['index.html', 'app.js', 'staffing.js', 'styles.css'].includes(relative)) return false;
+  if (!staticFiles.has(relative)) return false;
   try {
     const content = await readFile(join(publicDirectory, relative));
     response.writeHead(200, { 'content-type': contentTypes[extname(relative)] });
