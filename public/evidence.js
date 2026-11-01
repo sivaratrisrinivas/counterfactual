@@ -54,8 +54,8 @@ function drawOverlay() {
 
 function renderAnalysis(analysis) {
   analysisState.analysis = analysis;
-  video.src = '/media/prepared-checkout.mp4';
-  document.querySelector('#analysis-status').textContent = 'Saved analysis · no fresh inference';
+  video.src = analysis.status === 'fresh' ? (analysis.clip.videoUrl || `/api/analysis/uploads/${analysis.id}/video`) : '/media/prepared-checkout.mp4';
+  document.querySelector('#analysis-status').textContent = analysis.status === 'fresh' ? 'Fresh analysis · computed now' : 'Saved analysis · no fresh inference';
   document.querySelector('#analysis-facts').innerHTML = `<div><span>Clip</span><strong>${escapeHtml(analysis.clip.filename)}</strong></div><div><span>Duration</span><strong>${analysis.clip.durationSeconds}s</strong></div><div><span>Segmentation</span><strong>${escapeHtml(analysis.provenance.models.segmentation)}</strong></div><div><span>Interpretation</span><strong>${escapeHtml(analysis.provenance.models.interpretation)}</strong></div><div><span>Processed</span><strong>${analysis.provenance.processedFrameCount} frames at ${analysis.provenance.processedFps} fps</strong></div>`;
   document.querySelector('#analysis-verdict').innerHTML = `<span class="verdict-label">Qualification</span><strong>Insufficient for calibration</strong><p>${escapeHtml(analysis.qualification.rationale)}</p>`;
   document.querySelector('#analysis-limitations').innerHTML = analysis.limitations.map((limitation) => `<li>${escapeHtml(limitation)}</li>`).join('');
@@ -66,6 +66,8 @@ function renderAnalysis(analysis) {
   document.querySelector('#detection-role-editor').innerHTML = `<p class="field-label">Review representative person roles and continuity</p><div class="role-editor-grid">${people.map((person) => `<label>Person ${escapeHtml(person.id)}<select data-person-id="${escapeHtml(person.id)}" class="role-correction"><option value="customer" ${person.role === 'customer' ? 'selected' : ''}>Customer</option><option value="staff" ${person.role === 'staff' ? 'selected' : ''}>Staff</option><option value="background" ${person.role === 'background' ? 'selected' : ''}>Background</option><option value="unknown" ${person.role === 'unknown' ? 'selected' : ''}>Unknown</option></select><select data-person-id="${escapeHtml(person.id)}" class="continuity-correction"><option value="continuous">Continuous</option><option value="unknown" selected>Unknown / review</option><option value="discontinuous">Discontinuous</option></select></label>`).join('')}</div>`;
   drawOverlay();
 }
+
+window.counterfactualLoadAnalysis = renderAnalysis;
 
 function showReview(review) {
   analysisState.review = review;

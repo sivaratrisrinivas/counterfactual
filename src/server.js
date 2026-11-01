@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { ModelWorkflow, WorkflowError } from './domain.js';
 import { StaffingWorkflow } from './staffing.js';
 import { AnalysisError, loadPreparedAnalysis, reviewAnalysis } from './analysis.js';
+import { FreshAnalysisError, FreshAnalysisWorkflow, parseMultipartVideo, UPLOAD_LIMITS } from './fresh-analysis.js';
 
 const publicDirectory = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'public');
 const contentTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.mp4': 'video/mp4' };
@@ -30,6 +31,18 @@ async function readJson(request) {
   }
 }
 
+async function readBody(request, limit = UPLOAD_LIMITS.maxBytes + 1_000_000) {
+  const contentLength = Number(request.headers['content-length']);
+  if (Number.isFinite(contentLength) && contentLength > limit) throw new FreshAnalysisError('Upload request is too large.', 413);
+  const chunks = []; let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > limit) throw new FreshAnalysisError('Upload request is too large.', 413);
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 async function serveStatic(response, pathname) {
   const relative = pathname === '/' ? 'index.html' : pathname.slice(1);
   if (!staticFiles.has(relative)) return false;
@@ -44,16 +57,19 @@ async function serveStatic(response, pathname) {
   return true;
 }
 
-export function createApplication({ staffingProvider, analysisSource } = {}) {
+export function createApplication({ staffingProvider, analysisSource, analysisProvider, inspectVideo, preprocessVideo } = {}) {
   const evidenceReviews = new Map();
-  const source = analysisSource ?? (async (analysisId) => {
+  const freshAnalyses = new Map();
+  const preparedSource = analysisSource ?? (async (analysisId) => {
     const analysis = await loadPreparedAnalysis();
     if (analysis.id !== analysisId) throw new AnalysisError('Analysis was not found.', 404);
     return analysis;
   });
+  const source = async (analysisId) => freshAnalyses.get(analysisId) ?? preparedSource(analysisId);
   const workflow = new ModelWorkflow({ evidenceReviews });
   const staffing = new StaffingWorkflow(workflow, { provider: staffingProvider });
-  return { workflow, staffing, analysisSource: source, evidenceReviews };
+  const uploads = new FreshAnalysisWorkflow({ analyses: freshAnalyses, provider: analysisProvider, inspect: inspectVideo, preprocess: preprocessVideo });
+  return { workflow, staffing, analysisSource: source, evidenceReviews, freshAnalyses, uploads };
 }
 
 export function createRequestHandler(application = createApplication()) {
@@ -63,6 +79,23 @@ export function createRequestHandler(application = createApplication()) {
       if (request.method === 'GET' && await serveStatic(response, url.pathname)) return;
       if (request.method === 'GET' && url.pathname === '/api/analysis/prepared') {
         sendJson(response, 200, { analysis: await application.analysisSource('prepared-pexels-checkout-36s') });
+        return;
+      }
+      if (request.method === 'POST' && (url.pathname === '/api/analysis/upload' || url.pathname === '/api/analysis/uploads')) {
+        const upload = parseMultipartVideo(await readBody(request), request.headers['content-type']);
+        sendJson(response, 202, { upload: application.uploads.start(upload) });
+        return;
+      }
+      const uploadStatus = url.pathname.match(/^\/api\/analysis\/uploads?\/([^/]+)$/);
+      if (request.method === 'GET' && uploadStatus) {
+        sendJson(response, 200, { upload: application.uploads.get(uploadStatus[1]) });
+        return;
+      }
+      const uploadVideo = url.pathname.match(/^\/api\/analysis\/uploads?\/([^/]+)\/video$/);
+      if (request.method === 'GET' && uploadVideo) {
+        const data = application.uploads.getVideo(uploadVideo[1]);
+        response.writeHead(200, { 'content-type': 'video/mp4', 'cache-control': 'no-store', 'content-length': data.length });
+        response.end(data);
         return;
       }
       const analysisReview = url.pathname.match(/^\/api\/analysis\/([^/]+)\/review$/);
@@ -102,7 +135,7 @@ export function createRequestHandler(application = createApplication()) {
         sendJson(response, 405, { error: 'Method not allowed.' });
       }
     } catch (error) {
-      const status = error instanceof WorkflowError || error instanceof AnalysisError ? error.status : 500;
+      const status = error instanceof WorkflowError || error instanceof AnalysisError || error instanceof FreshAnalysisError ? error.status : 500;
       sendJson(response, status, { error: status === 500 ? 'The server could not complete that request.' : error.message });
     }
   };

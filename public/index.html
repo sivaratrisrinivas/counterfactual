@@ -25,6 +25,23 @@
 
       <div id="notice" class="notice" role="status" hidden></div>
 
+      <section id="fresh-upload-section" class="upload-section panel" aria-labelledby="fresh-upload-title">
+        <div class="evidence-heading">
+          <div>
+            <p class="kicker">Fresh clip / bounded analysis</p>
+            <h2 id="fresh-upload-title">Bring your own short video.</h2>
+            <p class="panel-intro">The server checks the file, runs SAM 3.1 and Muse Wonder, then opens the same evidence review. Uploads are limited to 25 MB and 180 seconds.</p>
+          </div>
+          <span id="fresh-upload-status" class="analysis-status">No fresh clip selected</span>
+        </div>
+        <form id="fresh-upload-form" class="upload-form">
+          <label class="field-label" for="fresh-upload-file">Video file <input id="fresh-upload-file" type="file" accept="video/mp4,video/webm,video/quicktime" required></label>
+          <button class="secondary-button" type="submit">Analyze fresh clip</button>
+          <button id="prepared-demo-button" class="text-button" type="button">Return to prepared demo</button>
+        </form>
+        <p id="fresh-upload-error" class="upload-error" hidden></p>
+      </section>
+
       <section id="evidence-section" class="evidence-section" aria-labelledby="evidence-title">
         <div class="evidence-heading">
           <div>
@@ -172,5 +189,6 @@
     <script type="module" src="/app.js"></script>
     <script type="module" src="/evidence.js"></script>
     <script type="module" src="/staffing.js"></script>
+    <script type="module" src="/upload.js"></script>
   </body>
 </html>
