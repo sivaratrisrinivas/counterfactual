@@ -65,11 +65,12 @@ export function createApplication({ staffingProvider, analysisSource, analysisPr
     if (analysis.id !== analysisId) throw new AnalysisError('Analysis was not found.', 404);
     return analysis;
   });
+  const latestEvidenceReviewVersions = new Map();
   const source = async (analysisId) => freshAnalyses.get(analysisId) ?? preparedSource(analysisId);
-  const workflow = new ModelWorkflow({ evidenceReviews });
+  const workflow = new ModelWorkflow({ evidenceReviews, latestEvidenceReviewVersions });
   const staffing = new StaffingWorkflow(workflow, { provider: staffingProvider });
   const uploads = new FreshAnalysisWorkflow({ analyses: freshAnalyses, provider: analysisProvider, inspect: inspectVideo, preprocess: preprocessVideo });
-  return { workflow, staffing, analysisSource: source, evidenceReviews, freshAnalyses, uploads };
+  return { workflow, staffing, analysisSource: source, evidenceReviews, latestEvidenceReviewVersions, freshAnalyses, uploads };
 }
 
 export function createRequestHandler(application = createApplication()) {
@@ -102,6 +103,10 @@ export function createRequestHandler(application = createApplication()) {
       if (request.method === 'POST' && analysisReview) {
         const analysis = await application.analysisSource(analysisReview[1]);
         const review = reviewAnalysis(analysis, await readJson(request));
+        const reviewVersion = (application.latestEvidenceReviewVersions.get(review.analysisId) ?? 0) + 1;
+        review.reviewVersion = reviewVersion;
+        review.proposedModelInputs.evidenceReview.reviewVersion = reviewVersion;
+        application.latestEvidenceReviewVersions.set(review.analysisId, reviewVersion);
         application.evidenceReviews.set(`${review.analysisId}:${review.reviewVersion}`, review);
         sendJson(response, 200, { review });
         return;

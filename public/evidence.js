@@ -57,9 +57,11 @@ function renderAnalysis(analysis) {
   video.src = analysis.status === 'fresh' ? (analysis.clip.videoUrl || `/api/analysis/uploads/${analysis.id}/video`) : '/media/prepared-checkout.mp4';
   document.querySelector('#analysis-status').textContent = analysis.status === 'fresh' ? 'Fresh analysis · computed now' : 'Saved analysis · no fresh inference';
   document.querySelector('#analysis-facts').innerHTML = `<div><span>Clip</span><strong>${escapeHtml(analysis.clip.filename)}</strong></div><div><span>Duration</span><strong>${analysis.clip.durationSeconds}s</strong></div><div><span>Segmentation</span><strong>${escapeHtml(analysis.provenance.models.segmentation)}</strong></div><div><span>Interpretation</span><strong>${escapeHtml(analysis.provenance.models.interpretation)}</strong></div><div><span>Processed</span><strong>${analysis.provenance.processedFrameCount} frames at ${analysis.provenance.processedFps} fps</strong></div>`;
-  document.querySelector('#analysis-verdict').innerHTML = `<span class="verdict-label">Qualification</span><strong>Insufficient for calibration</strong><p>${escapeHtml(analysis.qualification.rationale)}</p>`;
+  const qualificationLabel = analysis.qualification.calibrationEligible ? 'Potentially eligible · human review required' : 'Insufficient for calibration';
+  document.querySelector('#analysis-verdict').innerHTML = `<span class="verdict-label">Qualification</span><strong>${qualificationLabel}</strong><p>${escapeHtml(analysis.qualification.rationale)}</p>`;
   document.querySelector('#analysis-limitations').innerHTML = analysis.limitations.map((limitation) => `<li>${escapeHtml(limitation)}</li>`).join('');
-  document.querySelector('#analysis-source').innerHTML = `Source: <a href="${escapeHtml(analysis.clip.sourceUrl)}" target="_blank" rel="noreferrer">Pexels footage</a> · <a href="${escapeHtml(analysis.clip.licenseUrl)}" target="_blank" rel="noreferrer">license</a>`;
+  const sourceLabel = analysis.status === 'fresh' ? 'user upload · rights unverified' : 'prepared footage';
+  document.querySelector('#analysis-source').innerHTML = `Source: <a href="${escapeHtml(analysis.clip.sourceUrl)}" target="_blank" rel="noreferrer">${sourceLabel}</a> · <a href="${escapeHtml(analysis.clip.licenseUrl)}" target="_blank" rel="noreferrer">rights note</a>`;
   document.querySelector('#evidence-zones').value = JSON.stringify(analysis.candidateZones, null, 2);
   document.querySelector('#evidence-events').value = JSON.stringify(analysis.candidateEvents, null, 2);
   const people = [...new Map(analysis.detections.flatMap((frame) => frame.people.map((person) => [person.id, person]))).values()].slice(0, 8);
@@ -75,6 +77,15 @@ function showReview(review) {
   result.hidden = false;
   result.innerHTML = `<strong>Review v${review.reviewVersion} saved.</strong><span>${review.completeWaitCount} complete observed waits; ${review.incompleteCases.length} incomplete or unobservable cases.</span><span>${escapeHtml(review.calibrationStatus.replaceAll('-', ' '))}. Assumed timings remain assumptions.</span>`;
   document.dispatchEvent(new CustomEvent('counterfactual:evidence-reviewed', { detail: review }));
+}
+
+function markReviewEdited() {
+  if (!analysisState.review) return;
+  analysisState.review = null;
+  const result = document.querySelector('#evidence-review-result');
+  result.hidden = false;
+  result.innerHTML = '<strong>Evidence review changed.</strong><span>Re-review these evidence inputs before saving the model again.</span>';
+  document.dispatchEvent(new CustomEvent('counterfactual:evidence-invalidated'));
 }
 
 reviewForm.addEventListener('submit', async (event) => {
@@ -100,6 +111,9 @@ reviewForm.addEventListener('submit', async (event) => {
     document.querySelector('#evidence-review-result').textContent = error.message;
   } finally { button.disabled = false; }
 });
+
+reviewForm.addEventListener('input', markReviewEdited);
+reviewForm.addEventListener('change', markReviewEdited);
 
 video.addEventListener('timeupdate', drawOverlay);
 video.addEventListener('loadedmetadata', drawOverlay);

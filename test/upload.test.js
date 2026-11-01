@@ -20,14 +20,15 @@ async function json(response) { return response.json(); }
 function fakeAnalysisProvider() {
   return async () => ({
     sam: { completed: true, failures: [], text: '<0f>7<|box;x1=1;y1=2;x2=4;y2=8;w=640;h=360|>\n<2f>7<|box;x1=2;y1=3;x2=5;y2=9;w=640;h=360|>' },
-    wonder: JSON.stringify({ scene_description: 'Synthetic queue test', camera_motion: 'fixed', visible_service_positions: ['one'], queue_topology_and_uncertainty: 'shared queue is uncertain', complete_observable_service_episodes: [], occlusion_problems: [], measurements_supported: ['detections'], measurements_not_supported: ['waiting times'], suitability_verdict: 'Insufficient for calibration.' }),
+    wonder: JSON.stringify({ scene_description: 'Synthetic queue test', camera_motion: 'fixed', visible_service_positions: ['one'], queue_topology_and_uncertainty: 'shared queue is uncertain', complete_observable_service_episodes: [], occlusion_problems: [], measurements_supported: ['detections'], measurements_not_supported: ['waiting times'], suitability_verdict: 'Insufficient for calibration.', calibration_eligibility: { eligible: false, traceable_queue: false, traceable_timings: false, rationale: 'The synthetic clip has no complete queue timings.' } }),
   });
 }
 
 function fakeMetadata() { return { durationSeconds: 4, width: 640, height: 360, frameRate: 5, codec: 'h264', processedFrameCount: 20, processedFps: 5 }; }
+function fakePreprocess(_input, _output, { metadata }) { return { ...metadata, data: Buffer.from('....ftypisomprocessed-video') }; }
 
 test('fresh upload returns bounded job status and enters the shared analysis review workflow', async () => {
-  const application = createApplication({ analysisProvider: fakeAnalysisProvider(), inspectVideo: async () => fakeMetadata(), preprocessVideo: async (_input, _output, { metadata }) => metadata });
+  const application = createApplication({ analysisProvider: fakeAnalysisProvider(), inspectVideo: async () => fakeMetadata(), preprocessVideo: fakePreprocess });
   await withServer(async (base) => {
     const fixture = multipartVideo(Buffer.from('....ftypisomsynthetic-video'));
     const started = await fetch(`${base}/api/analysis/upload`, { method: 'POST', headers: { 'content-type': fixture.contentType }, body: fixture.body });
@@ -50,9 +51,55 @@ test('fresh upload returns bounded job status and enters the shared analysis rev
     assert.equal(reviewResponse.status, 200);
     assert.equal(review.review.analysisStatus, 'fresh');
     assert.equal(review.review.proposedModelInputs.evidenceReview.analysisId, upload.id);
+    const modelResponse = await fetch(`${base}/api/models`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(review.review.proposedModelInputs) });
+    assert.equal(modelResponse.status, 201);
+    const model = (await json(modelResponse)).model;
+    const reviewedModelResponse = await fetch(`${base}/api/models/${model.id}/review`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ expectedVersion: model.version }) });
+    assert.equal(reviewedModelResponse.status, 200);
+    const reviewedModel = (await json(reviewedModelResponse)).model;
+    const comparisonResponse = await fetch(`${base}/api/models/${model.id}/compare`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ reviewedVersion: reviewedModel.version, interventionPositions: 2 }) });
+    assert.equal(comparisonResponse.status, 200);
+    assert.equal((await json(comparisonResponse)).comparison.interventionPositions, 2);
     const video = await fetch(`${base}/api/analysis/uploads/${upload.id}/video`);
     assert.equal(video.status, 200);
     assert.match(video.headers.get('content-type'), /video\/mp4/);
+    assert.equal(Buffer.from(await video.arrayBuffer()).toString(), '....ftypisomprocessed-video');
+  }, application);
+});
+
+test('completed empty SAM output is a valid zero-detection fresh analysis', async () => {
+  const application = createApplication({ analysisProvider: async () => ({ sam: { completed: true, failures: [], text: '' }, wonder: JSON.stringify({ scene_description: 'No people visible', camera_motion: 'fixed', visible_service_positions: [], queue_topology_and_uncertainty: 'No queue can be established.', complete_observable_service_episodes: [], occlusion_problems: [], measurements_supported: [], measurements_not_supported: ['all queue timings'], suitability_verdict: 'Insufficient.', calibration_eligibility: { eligible: false, traceable_queue: false, traceable_timings: false, rationale: 'No visible people or queue timings.' } }) }), inspectVideo: async () => fakeMetadata(), preprocessVideo: fakePreprocess });
+  await withServer(async (base) => {
+    const fixture = multipartVideo(Buffer.from('....ftypisomsynthetic-video'));
+    const started = await fetch(`${base}/api/analysis/upload`, { method: 'POST', headers: { 'content-type': fixture.contentType }, body: fixture.body });
+    const { upload } = await json(started);
+    let result;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      result = await json(await fetch(`${base}/api/analysis/uploads/${upload.id}`));
+      if (result.upload.status === 'completed' || result.upload.status === 'failed') break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    assert.equal(result.upload.status, 'completed');
+    assert.deepEqual(result.upload.analysis.detections, []);
+    assert.equal(result.upload.analysis.qualification.calibrationEligible, false);
+  }, application);
+});
+
+test('structured qualifying evidence preserves identity-unknown service proposals for review', async () => {
+  const application = createApplication({ analysisProvider: async () => ({ sam: { completed: true, failures: [], text: '<1f>4<|box;x1=8;y1=10;x2=30;y2=80;w=640;h=360|>' }, wonder: JSON.stringify({ scene_description: 'Visible service lane', camera_motion: 'fixed', visible_service_positions: ['desk'], queue_topology_and_uncertainty: 'One shared queue is visible.', complete_observable_service_episodes: [{ start_seconds: 1, end_seconds: 2 }], occlusion_problems: [], measurements_supported: ['service episode timing'], measurements_not_supported: ['queue join identity'], suitability_verdict: 'Suitable pending human review.', calibration_eligibility: { eligible: true, traceable_queue: true, traceable_timings: true, rationale: 'A visible queue and bounded episode are traceable in the clip.' } }) }), inspectVideo: async () => fakeMetadata(), preprocessVideo: fakePreprocess });
+  await withServer(async (base) => {
+    const fixture = multipartVideo(Buffer.from('....ftypisomsynthetic-video'));
+    const started = await fetch(`${base}/api/analysis/upload`, { method: 'POST', headers: { 'content-type': fixture.contentType }, body: fixture.body });
+    const { upload } = await json(started);
+    let result;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      result = await json(await fetch(`${base}/api/analysis/uploads/${upload.id}`));
+      if (result.upload.status === 'completed' || result.upload.status === 'failed') break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    assert.equal(result.upload.status, 'completed');
+    assert.equal(result.upload.analysis.qualification.calibrationEligible, true);
+    assert.deepEqual(result.upload.analysis.candidateEvents.map((event) => [event.type, event.timeSeconds, event.personId]), [['service-start', 1, null], ['service-end', 2, null]]);
   }, application);
 });
 
@@ -70,7 +117,7 @@ test('fresh upload rejects invalid media before starting provider work', async (
 });
 
 test('malformed or incomplete provider output fails the fresh job without prepared fallback', async () => {
-  const application = createApplication({ analysisProvider: async () => ({ sam: { completed: false, failures: [], text: '<0f>bad' }, wonder: '{}' }), inspectVideo: async () => fakeMetadata(), preprocessVideo: async (_input, _output, { metadata }) => metadata });
+  const application = createApplication({ analysisProvider: async () => ({ sam: { completed: false, failures: [], text: '<0f>bad' }, wonder: '{}' }), inspectVideo: async () => fakeMetadata(), preprocessVideo: fakePreprocess });
   await withServer(async (base) => {
     const fixture = multipartVideo(Buffer.from('....ftypisomsynthetic-video'));
     const started = await fetch(`${base}/api/analysis/uploads`, { method: 'POST', headers: { 'content-type': fixture.contentType }, body: fixture.body });
@@ -89,7 +136,7 @@ test('malformed or incomplete provider output fails the fresh job without prepar
 });
 
 test('non-empty SAM text without valid frame records fails instead of becoming empty analysis', async () => {
-  const application = createApplication({ analysisProvider: async () => ({ sam: { completed: true, failures: [], text: '<0f>not-a-box' }, wonder: '{}' }), inspectVideo: async () => fakeMetadata(), preprocessVideo: async (_input, _output, { metadata }) => metadata });
+  const application = createApplication({ analysisProvider: async () => ({ sam: { completed: true, failures: [], text: '<0f>not-a-box' }, wonder: '{}' }), inspectVideo: async () => fakeMetadata(), preprocessVideo: fakePreprocess });
   await withServer(async (base) => {
     const fixture = multipartVideo(Buffer.from('....ftypisomsynthetic-video'));
     const started = await fetch(`${base}/api/analysis/upload`, { method: 'POST', headers: { 'content-type': fixture.contentType }, body: fixture.body });
@@ -103,4 +150,52 @@ test('non-empty SAM text without valid frame records fails instead of becoming e
     assert.equal(result.upload.status, 'failed');
     assert.match(result.upload.error, /malformed/i);
   }, application);
+});
+
+test('duration, size, and format bounds reject uploads before provider work', async () => {
+  let providerCalls = 0;
+  const application = createApplication({ analysisProvider: async () => { providerCalls += 1; throw new Error('must not run'); }, inspectVideo: async () => ({ ...fakeMetadata(), durationSeconds: 181 }), preprocessVideo: fakePreprocess });
+  await withServer(async (base) => {
+    const invalidFormat = multipartVideo(Buffer.from('not-video'), { filename: 'fresh.txt', type: 'text/plain' });
+    const formatResponse = await fetch(`${base}/api/analysis/upload`, { method: 'POST', headers: { 'content-type': invalidFormat.contentType }, body: invalidFormat.body });
+    assert.equal(formatResponse.status, 400);
+    const tooLarge = multipartVideo(Buffer.from('....ftypisomsynthetic-video'));
+    const oversizedBody = Buffer.concat([tooLarge.body, Buffer.alloc(26 * 1024 * 1024)]);
+    const sizeResponse = await fetch(`${base}/api/analysis/upload`, { method: 'POST', headers: { 'content-type': tooLarge.contentType }, body: oversizedBody });
+    assert.equal(sizeResponse.status, 413);
+    const durationFixture = multipartVideo(Buffer.from('....ftypisomsynthetic-video'));
+    const durationStart = await fetch(`${base}/api/analysis/upload`, { method: 'POST', headers: { 'content-type': durationFixture.contentType }, body: durationFixture.body });
+    const { upload } = await json(durationStart);
+    let result;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      result = await json(await fetch(`${base}/api/analysis/uploads/${upload.id}`));
+      if (result.upload.status === 'failed') break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    assert.equal(result.upload.status, 'failed');
+    assert.match(result.upload.error, /duration/i);
+    assert.equal(providerCalls, 0);
+  }, application);
+});
+
+test('provider exceptions and malformed Wonder evidence fail without a prepared fallback', async () => {
+  for (const provider of [
+    async () => { throw new Error('provider unavailable'); },
+    async () => ({ sam: { completed: true, failures: [], text: '' }, wonder: JSON.stringify({ scene_description: 'Malformed', camera_motion: 'fixed', visible_service_positions: ['one'], queue_topology_and_uncertainty: 'uncertain', complete_observable_service_episodes: [{ start_seconds: 'later', end_seconds: 2 }], occlusion_problems: [], measurements_supported: [], measurements_not_supported: [], suitability_verdict: 'suitable', calibration_eligibility: { eligible: true, traceable_queue: true, traceable_timings: true, rationale: 'bad timing type' } }) }),
+  ]) {
+    const application = createApplication({ analysisProvider: provider, inspectVideo: async () => fakeMetadata(), preprocessVideo: fakePreprocess });
+    await withServer(async (base) => {
+      const fixture = multipartVideo(Buffer.from('....ftypisomsynthetic-video'));
+      const started = await fetch(`${base}/api/analysis/upload`, { method: 'POST', headers: { 'content-type': fixture.contentType }, body: fixture.body });
+      const { upload } = await json(started);
+      let result;
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        result = await json(await fetch(`${base}/api/analysis/uploads/${upload.id}`));
+        if (result.upload.status === 'failed') break;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      assert.equal(result.upload.status, 'failed');
+      assert.doesNotMatch(result.upload.error, /provider unavailable|stack|prepared/i);
+    }, application);
+  }
 });

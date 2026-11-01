@@ -1,6 +1,6 @@
 import { renderPlayback } from './playback.js';
 
-const state = { model: null, comparison: null, playback: null, evidenceReview: null };
+const state = { model: null, comparison: null, playback: null, evidenceReview: null, evidenceReviewStale: false };
 const arrivalList = document.querySelector('#arrival-list');
 const modelForm = document.querySelector('#model-form');
 const reviewButton = document.querySelector('#review-button');
@@ -112,6 +112,10 @@ function fillForm(model) {
 modelForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   clearNotice();
+  if (state.evidenceReviewStale) {
+    showNotice('Evidence review changed. Re-review the evidence before saving model inputs again.', 'error');
+    return;
+  }
   try {
     const payload = collectInputs();
     const result = state.model
@@ -191,10 +195,62 @@ addArrivalRow({ arrivalTime: 2, serviceDuration: 5 });
 document.addEventListener('counterfactual:evidence-reviewed', (event) => {
   const inputs = event.detail.proposedModelInputs;
   state.evidenceReview = inputs.evidenceReview;
+  state.evidenceReviewStale = false;
+  state.comparison = null;
+  state.playback?.destroy();
+  state.playback = null;
+  resultSection.hidden = true;
+  if (state.model) {
+    state.model.reviewed = false;
+    state.model.reviewedAt = null;
+    reviewButton.disabled = true;
+    reviewButton.textContent = 'Save reviewed evidence first';
+    document.querySelector('#review-tag').textContent = 'Evidence re-reviewed';
+    document.querySelector('#workflow-status').textContent = 'Evidence re-reviewed · save model inputs';
+    document.querySelector('.intervention-button').disabled = true;
+    window.dispatchEvent(new CustomEvent('counterfactual:model-updated', { detail: state.model }));
+  }
   document.querySelector('#baseline-positions').value = inputs.baselinePositions;
   arrivalList.innerHTML = '';
   for (const arrival of inputs.arrivals) addArrivalRow(arrival);
   document.querySelector('#initial-state').value = inputs.initialState.kind;
   document.querySelector('#workflow-status').textContent = 'Evidence reviewed · save model inputs';
   showNotice('Evidence review is ready. Save these explicit inputs before confirming the reviewed model.', 'success');
+});
+
+document.addEventListener('counterfactual:analysis-source-changed', () => {
+  state.playback?.destroy();
+  state.playback = null;
+  state.model = null;
+  state.comparison = null;
+  state.evidenceReview = null;
+  state.evidenceReviewStale = false;
+  resultSection.hidden = true;
+  reviewButton.disabled = true;
+  document.querySelector('.intervention-button').disabled = true;
+  document.querySelector('#review-facts').hidden = true;
+  document.querySelector('#assumptions').hidden = true;
+  document.querySelector('#review-tag').textContent = 'Not reviewed';
+  document.querySelector('#workflow-status').textContent = 'Choose evidence to begin';
+  document.querySelector('#review-copy').innerHTML = '<p>Save the inputs to see the exact model the what-if will use.</p>';
+});
+
+document.addEventListener('counterfactual:evidence-invalidated', () => {
+  state.evidenceReview = null;
+  state.evidenceReviewStale = true;
+  state.comparison = null;
+  state.playback?.destroy();
+  state.playback = null;
+  resultSection.hidden = true;
+  if (state.model) {
+    state.model.reviewed = false;
+    state.model.reviewedAt = null;
+    reviewButton.disabled = true;
+    reviewButton.textContent = 'Save a fresh evidence review';
+    document.querySelector('#review-tag').textContent = 'Evidence changed';
+    document.querySelector('#workflow-status').textContent = 'Evidence review changed';
+    document.querySelector('.intervention-button').disabled = true;
+    window.dispatchEvent(new CustomEvent('counterfactual:model-updated', { detail: state.model }));
+  }
+  showNotice('Evidence review changed. Re-review the evidence before saving model inputs again.', 'error');
 });

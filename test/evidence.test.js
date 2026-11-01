@@ -28,6 +28,10 @@ test('prepared analysis exposes provenance, explicit frame timing, rights and re
     assert.equal(analysis.qualification.calibrationEligible, false);
     assert.match(analysis.clip.licenseUrl, /pexels/);
     assert.equal(analysis.detections.some((frame) => frame.people.some((person) => person.role === 'staff' && person.membership === 'excluded')), true);
+    assert.equal(analysis.candidateEvents.length, 0);
+    assert.equal(analysis.candidateZones.find((zone) => zone.id === 'waiting-area-candidate').source.kind, 'assumption');
+    assert.match(analysis.candidateZones.find((zone) => zone.id === 'waiting-area-candidate').source.reason, /formed shared queue|waiting boundary/i);
+    assert.equal(analysis.candidateZones.find((zone) => zone.id === 'service-area-candidate').source.kind, 'video');
   });
 });
 
@@ -58,6 +62,45 @@ test('evidence review keeps incomplete waits separate and corrected events trace
     assert.equal(omittedFingerprint.body.model.evidenceReview.editedAfterEvidenceReview, true);
     assert.equal(omittedFingerprint.body.model.evidenceReview.evidenceStatus, 'exploratory-assumptions-required');
   });
+});
+
+test('a newer evidence review invalidates older model comparisons and staffing proposals', async () => {
+  const application = createApplication({
+    staffingProvider: async () => ({ supported: true, targetPositions: 2, explanation: 'Add one independent service position.' }),
+  });
+  await withServer(async (base) => {
+    const prepared = await jsonFetch(base, '/api/analysis/prepared');
+    const analysisId = prepared.body.analysis.id;
+    const reviewInput = {
+      topology: 'single-shared-queue',
+      baselinePositions: 1,
+      initialState: { kind: 'empty' },
+      assumedArrivals: [{ id: 'assumed-1', arrivalTime: 0, serviceDuration: 5 }],
+      assumptions: ['The saved clip does not establish queue timings.'],
+    };
+    const firstReview = await jsonFetch(base, `/api/analysis/${analysisId}/review`, { method: 'POST', body: JSON.stringify(reviewInput) });
+    assert.equal(firstReview.response.status, 200);
+    assert.equal(firstReview.body.review.reviewVersion, 1);
+    const created = await jsonFetch(base, '/api/models', { method: 'POST', body: JSON.stringify(firstReview.body.review.proposedModelInputs) });
+    const reviewed = await jsonFetch(base, `/api/models/${created.body.model.id}/review`, { method: 'POST', body: JSON.stringify({ expectedVersion: created.body.model.version }) });
+    const proposal = await jsonFetch(base, `/api/models/${created.body.model.id}/staffing/interpret`, { method: 'POST', body: JSON.stringify({ request: 'add another service position' }) });
+    assert.equal(proposal.response.status, 200);
+    const beforeCorrection = await jsonFetch(base, `/api/models/${created.body.model.id}/compare`, { method: 'POST', body: JSON.stringify({ reviewedVersion: reviewed.body.model.version, interventionPositions: 2 }) });
+    assert.equal(beforeCorrection.response.status, 200);
+
+    const secondReview = await jsonFetch(base, `/api/analysis/${analysisId}/review`, { method: 'POST', body: JSON.stringify({ ...reviewInput, assumptions: ['The user re-reviewed the saved limitations.'] }) });
+    assert.equal(secondReview.response.status, 200);
+    assert.equal(secondReview.body.review.reviewVersion, 2);
+    assert.equal(secondReview.body.review.proposedModelInputs.evidenceReview.reviewVersion, 2);
+
+    const staleCompare = await jsonFetch(base, `/api/models/${created.body.model.id}/compare`, { method: 'POST', body: JSON.stringify({ reviewedVersion: reviewed.body.model.version, interventionPositions: 2 }) });
+    assert.equal(staleCompare.response.status, 409);
+    assert.match(staleCompare.body.error, /evidence|review|stale/i);
+    const staleInterpret = await jsonFetch(base, `/api/models/${created.body.model.id}/staffing/interpret`, { method: 'POST', body: JSON.stringify({ request: 'add another service position' }) });
+    assert.equal(staleInterpret.response.status, 409);
+    const staleConfirm = await jsonFetch(base, `/api/models/${created.body.model.id}/staffing/confirm`, { method: 'POST', body: JSON.stringify({ proposalId: proposal.body.proposal.id }) });
+    assert.equal(staleConfirm.response.status, 409);
+  }, application);
 });
 
 test('synthetic analysis source reviews continuous video events and preserves both endpoints', async () => {
