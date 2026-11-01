@@ -3,10 +3,11 @@ import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ModelWorkflow, WorkflowError } from './domain.js';
+import { StaffingWorkflow } from './staffing.js';
 
 const publicDirectory = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'public');
 const contentTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
-const staticFiles = new Set(['index.html', 'app.js', 'playback.js', 'styles.css']);
+const staticFiles = new Set(['index.html', 'app.js', 'staffing.js', 'playback.js', 'styles.css']);
 
 function sendJson(response, status, body) {
   const payload = JSON.stringify(body);
@@ -42,9 +43,10 @@ async function serveStatic(response, pathname) {
   return true;
 }
 
-export function createApplication() {
+export function createApplication({ staffingProvider } = {}) {
   const workflow = new ModelWorkflow();
-  return { workflow };
+  const staffing = new StaffingWorkflow(workflow, { provider: staffingProvider });
+  return { workflow, staffing };
 }
 
 export function createRequestHandler(application = createApplication()) {
@@ -52,7 +54,7 @@ export function createRequestHandler(application = createApplication()) {
     const url = new URL(request.url, 'http://localhost');
     try {
       if (request.method === 'GET' && await serveStatic(response, url.pathname)) return;
-      const match = url.pathname.match(/^\/api\/models(?:\/([^/]+)(?:\/(review|compare))?)?$/);
+      const match = url.pathname.match(/^\/api\/models(?:\/([^/]+)(?:\/(review|compare|staffing\/interpret|staffing\/confirm))?)?$/);
       if (!match) {
         sendJson(response, 404, { error: 'Not found.' });
         return;
@@ -71,6 +73,12 @@ export function createRequestHandler(application = createApplication()) {
       } else if (request.method === 'POST' && id && action === 'compare') {
         const body = await readJson(request);
         sendJson(response, 200, { comparison: application.workflow.compare(id, body.reviewedVersion, body.interventionPositions) });
+      } else if (request.method === 'POST' && id && action === 'staffing/interpret') {
+        const body = await readJson(request);
+        sendJson(response, 200, { proposal: await application.staffing.interpret(id, body.request) });
+      } else if (request.method === 'POST' && id && action === 'staffing/confirm') {
+        const body = await readJson(request);
+        sendJson(response, 200, await application.staffing.confirm(id, body.proposalId));
       } else {
         sendJson(response, 405, { error: 'Method not allowed.' });
       }
