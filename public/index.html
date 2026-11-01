@@ -96,6 +96,22 @@
           <span class="prediction-label">Unvalidated model prediction</span>
         </div>
         <div class="metric-strip" id="metric-strip"></div>
+        <article id="playback-section" class="replay-panel playback-panel" aria-label="Synchronized queue replay">
+          <div class="replay-heading playback-heading">
+            <div>
+              <h3>Watch the same cohort move</h3>
+              <p>One clock drives both lanes. Waiting, service, and departure are calculated from the event timeline.</p>
+            </div>
+            <span id="playback-state" class="playback-state">Paused</span>
+          </div>
+          <div class="playback-controls" role="group" aria-label="Playback controls">
+            <button id="playback-toggle" class="secondary-button playback-button" type="button">Play</button>
+            <button id="playback-replay" class="text-button playback-replay" type="button">Replay</button>
+            <label class="playback-slider" for="playback-time"><span>Shared time</span><input id="playback-time" type="range" min="0" max="1" step="0.1" value="0"><output id="playback-clock" for="playback-time">0.0s / 1.0s</output></label>
+          </div>
+          <div id="playback-frame" class="playback-frame"></div>
+          <p class="playback-note">Blue is the baseline. Orange is the intervention. A filled position means service is happening; waiting people remain in the queue row.</p>
+        </article>
         <div class="comparison-grid">
           <article class="replay-panel">
             <div class="replay-heading"><h3>Queue length over time</h3><p>People receiving service are not in the queue.</p></div>
