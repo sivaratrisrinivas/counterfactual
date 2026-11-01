@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Counterfactual · queue studio</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="masthead">
+      <a class="wordmark" href="/" aria-label="Counterfactual home"><span>counter</span><i>factual</i></a>
+      <p class="strapline">A small queue, seen twice.</p>
+      <div class="status-chip"><span class="status-dot"></span><span id="workflow-status">Draft model</span></div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="kicker">Queue studio / staffing what-if</p>
+          <h1>Put the same arrivals<br><em>through a different door count.</em></h1>
+          <p class="lede">Set the baseline you can explain, review the assumptions, then watch a finite cohort move through one or two service positions.</p>
+        </div>
+        <div class="hero-mark" aria-hidden="true"><span>01</span><span>02</span><span>03</span><b></b></div>
+      </section>
+
+      <div id="notice" class="notice" role="status" hidden></div>
+
+      <section class="work-grid" aria-label="Model setup and review">
+        <article class="panel setup-panel">
+          <div class="panel-heading">
+            <div><span class="step">01</span><h2>Describe the line</h2></div>
+            <span class="tag assumption-tag">Assumptions</span>
+          </div>
+          <p class="panel-intro">These are the inputs the simulator will hold constant across both scenarios.</p>
+          <form id="model-form">
+            <label class="field-label" for="baseline-positions">Baseline service positions</label>
+            <div class="number-wrap"><input id="baseline-positions" name="baselinePositions" type="number" min="1" max="32" step="1" value="1" required><span>positions</span></div>
+
+            <div class="field-row heading-row"><span class="field-label">Arrival schedule</span><span class="field-label">Service demand</span></div>
+            <div id="arrival-list" class="arrival-list"></div>
+            <button class="text-button" id="add-arrival" type="button">+ Add another arrival</button>
+
+            <label class="field-label" for="initial-state">Initial state</label>
+            <select id="initial-state" name="initialState">
+              <option value="empty">Empty queue and idle positions</option>
+            </select>
+            <p class="microcopy">The initial state is explicit. Residual service and people already waiting are outside this first slice.</p>
+
+            <button class="primary-button" type="submit"><span>Save model inputs</span><b>↗</b></button>
+          </form>
+        </article>
+
+        <article class="panel review-panel">
+          <div class="panel-heading">
+            <div><span class="step">02</span><h2>Review before running</h2></div>
+            <span class="tag" id="review-tag">Not reviewed</span>
+          </div>
+          <div class="review-copy" id="review-copy">
+            <p>Save the inputs to see the exact model the what-if will use.</p>
+          </div>
+          <dl class="review-facts" id="review-facts" hidden>
+            <div><dt>Arrivals</dt><dd id="fact-arrivals">—</dd></div>
+            <div><dt>Baseline</dt><dd id="fact-baseline">—</dd></div>
+            <div><dt>Initial state</dt><dd id="fact-initial">—</dd></div>
+            <div><dt>Model version</dt><dd id="fact-version">—</dd></div>
+          </dl>
+          <div class="assumptions" id="assumptions" hidden>
+            <p class="field-label">The model assumes</p>
+            <ul id="assumption-list"></ul>
+          </div>
+          <button class="secondary-button" id="review-button" type="button" disabled>Confirm reviewed model</button>
+        </article>
+      </section>
+
+      <section class="what-if panel" aria-label="Staffing what-if">
+        <div class="panel-heading">
+          <div><span class="step">03</span><h2>Change staffing</h2></div>
+          <span class="tag intervention-tag">Live calculation</span>
+        </div>
+        <div class="what-if-grid">
+          <div>
+            <p class="panel-intro">Only the number of independent service positions changes. Arrivals and service demands stay the same.</p>
+            <form id="compare-form" class="compare-form">
+              <label class="field-label" for="intervention-positions">Intervention positions</label>
+              <div class="intervention-input"><input id="intervention-positions" type="number" min="1" max="32" step="1" value="2" required><span>positions</span></div>
+              <button class="primary-button intervention-button" type="submit" disabled><span>Run the what-if</span><b>↗</b></button>
+            </form>
+          </div>
+          <div class="constraint-note"><span class="note-mark">↳</span><p><strong>What stays fixed</strong><br>Same cohort, same arrival times, same service demands. This is a model prediction, not intervention validation.</p></div>
+        </div>
+      </section>
+
+      <section id="result-section" class="result-section" hidden aria-live="polite">
+        <div class="result-heading">
+          <div><p class="kicker">Computed from the reviewed model</p><h2>One cohort, two paths.</h2></div>
+          <span class="prediction-label">Unvalidated model prediction</span>
+        </div>
+        <div class="metric-strip" id="metric-strip"></div>
+        <div class="comparison-grid">
+          <article class="replay-panel">
+            <div class="replay-heading"><h3>Queue length over time</h3><p>People receiving service are not in the queue.</p></div>
+            <div class="legend"><span class="legend-item"><i class="swatch baseline-swatch"></i>Baseline</span><span class="legend-item"><i class="swatch intervention-swatch"></i>Intervention</span></div>
+            <div id="timeline" class="timeline"></div>
+          </article>
+          <article class="replay-panel event-panel">
+            <div class="replay-heading"><h3>Service starts</h3><p>Waiting ends when service begins.</p></div>
+            <div id="event-table" class="event-table"></div>
+          </article>
+        </div>
+        <div class="result-assumptions"><p class="field-label">Read this comparison with</p><div id="result-assumption-list"></div></div>
+      </section>
+    </main>
+
+    <footer><span>Counterfactual / exploratory queue model</span><span>Values marked assumptions are not observations.</span></footer>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
