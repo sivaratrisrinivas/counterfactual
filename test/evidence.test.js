@@ -130,6 +130,31 @@ test('synthetic analysis source reviews continuous video events and preserves bo
   }, application);
 });
 
+test('eligible analysis review stays exploratory with no usable or rejected waits', async () => {
+  const eligible = validateAnalysis({
+    schemaVersion: 1, id: 'eligible-without-waits', status: 'synthetic',
+    clip: { id: 'eligible-clip', filename: 'eligible.mp4', durationSeconds: 4, width: 10, height: 10, sourceUrl: 'https://example.test/eligible', licenseUrl: 'https://example.test/license', attribution: 'Synthetic test fixture' },
+    provenance: { analysisMode: 'synthetic-test-fixture', savedAt: '2026-11-01T00:00:00Z', processedFps: 1, processedFrameCount: 3, models: { segmentation: 'synthetic-sam', interpretation: 'synthetic-wonder' } },
+    detections: [], candidateZones: [], candidateEvents: [], limitations: [], assessment: {}, qualification: { verdict: 'qualified', calibrationEligible: true, rationale: 'Synthetic source claims eligibility.' },
+  });
+  const application = createApplication({ analysisSource: async (id) => { if (id !== eligible.id) throw new Error('missing'); return eligible; } });
+  await withServer(async (base) => {
+    for (const observations of [undefined, [
+      { type: 'queue-join', personId: 12, role: 'customer', membership: 'waiting', continuity: 'unknown', timeSeconds: 1, source: { kind: 'video', startSeconds: 1, endSeconds: 1 } },
+      { type: 'service-start', personId: 12, role: 'customer', membership: 'service', continuity: 'unknown', timeSeconds: 2, source: { kind: 'video', startSeconds: 2, endSeconds: 2 } },
+    ]]) {
+      const body = { topology: 'single-shared-queue', baselinePositions: 1, initialState: { kind: 'empty' } };
+      if (observations) body.observations = observations;
+      const review = await jsonFetch(base, `/api/analysis/${eligible.id}/review`, { method: 'POST', body: JSON.stringify(body) });
+      assert.equal(review.response.status, 200);
+      assert.equal(review.body.review.completeWaitCount, 0);
+      assert.equal(review.body.review.evidenceStatus, 'exploratory-assumptions-required');
+      assert.equal(review.body.review.calibrationStatus, 'insufficient-for-calibration');
+      assert.equal(review.body.review.qualification.calibrationEligible, true);
+    }
+  }, application);
+});
+
 test('review rejects video evidence outside the clip or outside its supporting interval', async () => {
   await withServer(async (base) => {
     const prepared = await jsonFetch(base, '/api/analysis/prepared');
