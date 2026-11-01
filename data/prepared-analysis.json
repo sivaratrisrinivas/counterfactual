@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "id": "prepared-pexels-checkout-36s",
+  "status": "saved",
+  "clip": {
+    "id": "pexels-35042443-checkout-36s",
+    "filename": "checkout-36s.mp4",
+    "durationSeconds": 36,
+    "width": 640,
+    "height": 360,
+    "sourceUrl": "https://www.pexels.com/video/busy-retail-checkout-during-super-friday-event-35042443/",
+    "licenseUrl": "https://www.pexels.com/legal-pages/license/",
+    "attribution": "Busy Retail Checkout During Super Friday Event, Michael Takahashi, Pexels"
+  },
+  "provenance": {
+    "analysisMode": "saved-analysis-from-real-pipeline",
+    "savedAt": "2026-11-01T17:40:00Z",
+    "processedFps": 5,
+    "processedFrameCount": 180,
+    "models": { "segmentation": "sam-3.1", "interpretation": "muse-wonder-1.0" }
+  },
+  "detections": [
+    { "frameIndex": 0, "timeSeconds": 0, "people": [
+      { "id": 0, "box": { "x1": 83, "y1": 78, "x2": 98, "y2": 108, "width": 640, "height": 360 }, "role": "unknown", "membership": "unknown" },
+      { "id": 1, "box": { "x1": 84, "y1": 20, "x2": 243, "y2": 359, "width": 640, "height": 360 }, "role": "staff", "membership": "excluded" },
+      { "id": 2, "box": { "x1": 248, "y1": 80, "x2": 301, "y2": 229, "width": 640, "height": 360 }, "role": "unknown", "membership": "unknown" },
+      { "id": 3, "box": { "x1": 0, "y1": 92, "x2": 28, "y2": 228, "width": 640, "height": 360 }, "role": "background", "membership": "excluded" }
+    ] },
+    { "frameIndex": 30, "timeSeconds": 6, "people": [
+      { "id": 1, "box": { "x1": 94, "y1": 28, "x2": 321, "y2": 359, "width": 640, "height": 360 }, "role": "staff", "membership": "excluded" },
+      { "id": 6, "box": { "x1": 34, "y1": 87, "x2": 97, "y2": 279, "width": 640, "height": 360 }, "role": "background", "membership": "excluded" }
+    ] },
+    { "frameIndex": 60, "timeSeconds": 12, "people": [
+      { "id": 1, "box": { "x1": 93, "y1": 48, "x2": 305, "y2": 359, "width": 640, "height": 360 }, "role": "staff", "membership": "excluded" },
+      { "id": 2, "box": { "x1": 64, "y1": 115, "x2": 116, "y2": 279, "width": 640, "height": 360 }, "role": "customer", "membership": "service" },
+      { "id": 11, "box": { "x1": 553, "y1": 90, "x2": 639, "y2": 357, "width": 640, "height": 360 }, "role": "background", "membership": "excluded" }
+    ] },
+    { "frameIndex": 90, "timeSeconds": 18, "people": [
+      { "id": 1, "box": { "x1": 74, "y1": 118, "x2": 306, "y2": 359, "width": 640, "height": 360 }, "role": "staff", "membership": "excluded" },
+      { "id": 5, "box": { "x1": 52, "y1": 126, "x2": 83, "y2": 231, "width": 640, "height": 360 }, "role": "customer", "membership": "service" },
+      { "id": 11, "box": { "x1": 487, "y1": 84, "x2": 639, "y2": 341, "width": 640, "height": 360 }, "role": "background", "membership": "excluded" }
+    ] },
+    { "frameIndex": 120, "timeSeconds": 24, "people": [
+      { "id": 1, "box": { "x1": 41, "y1": 116, "x2": 262, "y2": 359, "width": 640, "height": 360 }, "role": "staff", "membership": "excluded" },
+      { "id": 9, "box": { "x1": 19, "y1": 113, "x2": 69, "y2": 255, "width": 640, "height": 360 }, "role": "customer", "membership": "service" },
+      { "id": 16, "box": { "x1": 597, "y1": 54, "x2": 639, "y2": 359, "width": 640, "height": 360 }, "role": "background", "membership": "excluded" }
+    ] },
+    { "frameIndex": 150, "timeSeconds": 30, "people": [
+      { "id": 1, "box": { "x1": 31, "y1": 88, "x2": 215, "y2": 359, "width": 640, "height": 360 }, "role": "staff", "membership": "excluded" },
+      { "id": 9, "box": { "x1": 44, "y1": 118, "x2": 91, "y2": 197, "width": 640, "height": 360 }, "role": "customer", "membership": "service" },
+      { "id": 11, "box": { "x1": 459, "y1": 82, "x2": 614, "y2": 345, "width": 640, "height": 360 }, "role": "background", "membership": "excluded" }
+    ] },
+    { "frameIndex": 179, "timeSeconds": 35.8, "people": [
+      { "id": 1, "box": { "x1": 5, "y1": 111, "x2": 218, "y2": 359, "width": 640, "height": 360 }, "role": "staff", "membership": "excluded" },
+      { "id": 9, "box": { "x1": 81, "y1": 114, "x2": 121, "y2": 158, "width": 640, "height": 360 }, "role": "customer", "membership": "service" },
+      { "id": 11, "box": { "x1": 441, "y1": 84, "x2": 595, "y2": 343, "width": 640, "height": 360 }, "role": "background", "membership": "excluded" }
+    ] }
+  ],
+  "candidateZones": [
+    { "id": "waiting-area-candidate", "label": "Waiting area candidate", "kind": "waiting", "x": 0.02, "y": 0.3, "width": 0.3, "height": 0.55, "source": { "kind": "video", "startSeconds": 6, "endSeconds": 35.8 } },
+    { "id": "service-area-candidate", "label": "Service counter candidate", "kind": "service", "x": 0.1, "y": 0.18, "width": 0.45, "height": 0.75, "source": { "kind": "video", "startSeconds": 10, "endSeconds": 35.8 } }
+  ],
+  "candidateEvents": [
+    { "type": "service-start", "personId": 9, "timeSeconds": 10, "source": { "kind": "video", "startSeconds": 10, "endSeconds": 10 } }
+  ],
+  "limitations": [
+    "No formed shared queue or visible queue entrance is established.",
+    "No complete queue-join and service-start episode is visible for a reviewed person.",
+    "Camera has a slow rightward pan and minor framing drift.",
+    "Counter, staff, crop, and background pedestrians create occlusion and role ambiguity.",
+    "SAM object ids are tentative links during continuous visibility and are not identity guarantees across re-entry or full occlusion."
+  ],
+  "assessment": {
+    "sceneDescription": "Indoor mall checkout counter with POS equipment, staff, one customer at the counter, and background pedestrians.",
+    "cameraMotion": "Mostly fixed with a slow slight pan right and minor framing drift.",
+    "measurementsSupported": ["Visible POS terminals", "staff presence", "one incomplete customer-at-counter interval"],
+    "measurementsNotSupported": ["arrival rates", "service times", "waiting times", "queue discipline", "intervention validation"]
+  },
+  "qualification": {
+    "verdict": "insufficient-for-calibration",
+    "calibrationEligible": false,
+    "rationale": "Illustrative integration footage only. The saved Wonder assessment and direct overlay inspection found no visible formed queue or complete service episode."
+  }
+}

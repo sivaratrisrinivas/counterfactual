@@ -25,6 +25,47 @@
 
       <div id="notice" class="notice" role="status" hidden></div>
 
+      <section id="evidence-section" class="evidence-section" aria-labelledby="evidence-title">
+        <div class="evidence-heading">
+          <div>
+            <p class="kicker">Prepared clip / saved analysis</p>
+            <h2 id="evidence-title">Inspect what the footage can support.</h2>
+          </div>
+          <span id="analysis-status" class="analysis-status">Loading analysis…</span>
+        </div>
+        <div class="evidence-grid">
+          <div class="evidence-video-wrap">
+            <video id="evidence-video" controls preload="metadata" aria-label="Prepared checkout footage"></video>
+            <canvas id="evidence-overlay" aria-hidden="true"></canvas>
+            <div class="video-caption"><span id="video-time">0.0s</span><span>Boxes are detections, not queue counts.</span></div>
+          </div>
+          <div class="evidence-notes">
+            <div class="analysis-facts" id="analysis-facts"></div>
+            <div class="verdict-block" id="analysis-verdict"></div>
+            <div class="limitations-block"><p class="field-label">Evidence limits</p><ul id="analysis-limitations"></ul></div>
+            <p class="source-line" id="analysis-source"></p>
+          </div>
+        </div>
+        <details class="review-drawer" open>
+          <summary>Correct the review inputs before the model is confirmed</summary>
+          <form id="evidence-review-form" class="evidence-review-form">
+            <div class="review-input-grid">
+              <label class="field-label" for="evidence-topology">Queue topology<select id="evidence-topology"><option value="single-shared-queue">One shared queue</option><option value="unsupported">Reject this topology</option></select></label>
+              <label class="field-label" for="evidence-baseline">Baseline positions<input id="evidence-baseline" type="number" min="1" max="32" step="1" value="1" required></label>
+            </div>
+            <label class="field-label" for="evidence-zones">Zones, including source references</label>
+            <textarea id="evidence-zones" rows="4" spellcheck="false"></textarea>
+            <label class="field-label" for="evidence-events">Candidate events, including source references</label>
+            <textarea id="evidence-events" rows="4" spellcheck="false"></textarea>
+            <div id="detection-role-editor" class="detection-role-editor"></div>
+            <label class="field-label" for="evidence-assumptions">Assumptions carried into exploration</label>
+            <textarea id="evidence-assumptions" rows="2" placeholder="One assumption per line">Arrival and service timings are synthetic assumptions because the clip has no complete waits.</textarea>
+            <button class="secondary-button" type="submit">Confirm evidence review</button>
+          </form>
+          <div id="evidence-review-result" class="evidence-review-result" hidden></div>
+        </details>
+      </section>
+
       <section class="work-grid" aria-label="Model setup and review">
         <article class="panel setup-panel">
           <div class="panel-heading">
@@ -129,6 +170,7 @@
 
     <footer><span>Counterfactual / exploratory queue model</span><span>Values marked assumptions are not observations.</span></footer>
     <script type="module" src="/app.js"></script>
+    <script type="module" src="/evidence.js"></script>
     <script type="module" src="/staffing.js"></script>
   </body>
 </html>

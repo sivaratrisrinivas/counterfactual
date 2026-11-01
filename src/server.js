@@ -4,10 +4,11 @@ import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ModelWorkflow, WorkflowError } from './domain.js';
 import { StaffingWorkflow } from './staffing.js';
+import { AnalysisError, loadPreparedAnalysis, reviewAnalysis } from './analysis.js';
 
 const publicDirectory = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'public');
-const contentTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
-const staticFiles = new Set(['index.html', 'app.js', 'staffing.js', 'playback.js', 'styles.css']);
+const contentTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.mp4': 'video/mp4' };
+const staticFiles = new Set(['index.html', 'app.js', 'evidence.js', 'staffing.js', 'playback.js', 'styles.css', 'media/prepared-checkout.mp4']);
 
 function sendJson(response, status, body) {
   const payload = JSON.stringify(body);
@@ -43,10 +44,16 @@ async function serveStatic(response, pathname) {
   return true;
 }
 
-export function createApplication({ staffingProvider } = {}) {
-  const workflow = new ModelWorkflow();
+export function createApplication({ staffingProvider, analysisSource } = {}) {
+  const evidenceReviews = new Map();
+  const source = analysisSource ?? (async (analysisId) => {
+    const analysis = await loadPreparedAnalysis();
+    if (analysis.id !== analysisId) throw new AnalysisError('Analysis was not found.', 404);
+    return analysis;
+  });
+  const workflow = new ModelWorkflow({ evidenceReviews });
   const staffing = new StaffingWorkflow(workflow, { provider: staffingProvider });
-  return { workflow, staffing };
+  return { workflow, staffing, analysisSource: source, evidenceReviews };
 }
 
 export function createRequestHandler(application = createApplication()) {
@@ -54,6 +61,18 @@ export function createRequestHandler(application = createApplication()) {
     const url = new URL(request.url, 'http://localhost');
     try {
       if (request.method === 'GET' && await serveStatic(response, url.pathname)) return;
+      if (request.method === 'GET' && url.pathname === '/api/analysis/prepared') {
+        sendJson(response, 200, { analysis: await application.analysisSource('prepared-pexels-checkout-36s') });
+        return;
+      }
+      const analysisReview = url.pathname.match(/^\/api\/analysis\/([^/]+)\/review$/);
+      if (request.method === 'POST' && analysisReview) {
+        const analysis = await application.analysisSource(analysisReview[1]);
+        const review = reviewAnalysis(analysis, await readJson(request));
+        application.evidenceReviews.set(`${review.analysisId}:${review.reviewVersion}`, review);
+        sendJson(response, 200, { review });
+        return;
+      }
       const match = url.pathname.match(/^\/api\/models(?:\/([^/]+)(?:\/(review|compare|staffing\/interpret|staffing\/confirm))?)?$/);
       if (!match) {
         sendJson(response, 404, { error: 'Not found.' });
@@ -83,7 +102,7 @@ export function createRequestHandler(application = createApplication()) {
         sendJson(response, 405, { error: 'Method not allowed.' });
       }
     } catch (error) {
-      const status = error instanceof WorkflowError ? error.status : 500;
+      const status = error instanceof WorkflowError || error instanceof AnalysisError ? error.status : 500;
       sendJson(response, status, { error: status === 500 ? 'The server could not complete that request.' : error.message });
     }
   };
