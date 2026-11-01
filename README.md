@@ -32,4 +32,8 @@ The prepared route at `GET /api/analysis/prepared` loads `data/prepared-analysis
 
 The reusable adapter seam is `validateAnalysis` plus `parseSamOutput` in `src/analysis.js`. Future upload analysis should map provider responses into the same normalized contract before it reaches the review endpoint. SAM frame markers are explicit processed frame indices and can be sparse, so the adapter maps `frameIndex / processedFps` rather than using a response line number. Provider credentials and raw response bodies remain server-side scratch material and are not fixtures.
 
-The clip source and license are separate from this repository's software license. Pexels permits use in an app or presentation subject to its license restrictions; visible people, brands, and logos may have additional rights and no endorsement is implied.
+## Plain-language staffing requests
+
+After the model is reviewed, `POST /api/models/:id/staffing/interpret` accepts `{ request }` and returns a pending interpretation. The server sends the bounded request to Muse Wonder with a strict JSON schema, validates the returned position count locally, and records the current reviewed-model version. The browser shows the baseline and proposed count before the user confirms it.
+
+Confirmation uses `POST /api/models/:id/staffing/confirm` with `{ proposalId }`. Only this route runs the existing deterministic simulator. A changed model version, unsupported interpretation, malformed provider response, or provider failure cannot run a comparison. The explicit position-count control remains available when interpretation is unavailable. `MODEL_API_KEY` is read only by the server-side adapter.
