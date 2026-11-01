@@ -147,6 +147,19 @@ test('identical staffing and sparse arrivals report no improvement without a per
   });
 });
 
+test('simulation events use deterministic boundary ordering', async () => {
+  await withServer(async (base) => {
+    const created = await jsonFetch(base, '/api/models', { method: 'POST', body: JSON.stringify(syntheticInputs) });
+    const reviewed = await jsonFetch(base, `/api/models/${created.body.model.id}/review`, { method: 'POST', body: JSON.stringify({ expectedVersion: created.body.model.version }) });
+    const comparison = await jsonFetch(base, `/api/models/${created.body.model.id}/compare`, { method: 'POST', body: JSON.stringify({ reviewedVersion: reviewed.body.model.version, interventionPositions: 2 }) });
+    assert.equal(comparison.response.status, 200);
+    const atTimeZero = comparison.body.comparison.baseline.events.filter((event) => event.time === 0).map((event) => event.type);
+    const atTimeFive = comparison.body.comparison.baseline.events.filter((event) => event.time === 5).map((event) => event.type);
+    assert.deepEqual(atTimeZero, ['arrival', 'service-start']);
+    assert.deepEqual(atTimeFive, ['departure', 'service-start']);
+  });
+});
+
 test('the browser workflow exposes the computed playback surface', async () => {
   await withServer(async (base) => {
     const page = await fetch(`${base}/`);

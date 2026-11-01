@@ -102,6 +102,7 @@ export function createWonderStaffingProvider({
       });
       if (!response.ok) throw new StaffingProviderError('The staffing interpreter could not process this request.');
       const payload = await response.json();
+      if (payload.status !== 'completed') throw new StaffingProviderError('The staffing interpreter did not complete.');
       let parsed;
       try {
         parsed = JSON.parse(providerText(payload));
@@ -197,4 +198,3 @@ export class StaffingWorkflow {
     return structuredClone(view);
   }
 }
-

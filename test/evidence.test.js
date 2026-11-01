@@ -115,7 +115,7 @@ test('synthetic analysis source reviews continuous video events and preserves bo
   });
   const application = createApplication({ analysisSource: async (id) => { if (id !== synthetic.id) throw new Error('missing'); return synthetic; } });
   await withServer(async (base) => {
-    const review = await jsonFetch(base, `/api/analysis/${synthetic.id}/review`, { method: 'POST', body: JSON.stringify({ topology: 'single-shared-queue', baselinePositions: 1, initialState: { kind: 'empty' }, assumedArrivals: [{ id: 'assumed', arrivalTime: 0, serviceDuration: 2 }], observations: [{ type: 'queue-join', personId: 7, role: 'customer', membership: 'waiting', continuity: 'continuous', timeSeconds: 1, source: { kind: 'video', startSeconds: 1, endSeconds: 1 } }, { type: 'service-start', personId: 7, role: 'customer', membership: 'service', continuity: 'continuous', timeSeconds: 2, source: { kind: 'video', startSeconds: 2, endSeconds: 2 } }, { type: 'service-end', personId: 7, role: 'customer', membership: 'service', continuity: 'continuous', timeSeconds: 4, source: { kind: 'video', startSeconds: 4, endSeconds: 4 } }, { type: 'queue-join', personId: 8, role: 'customer', membership: 'waiting', continuity: 'unknown', timeSeconds: 1, source: { kind: 'video', startSeconds: 1, endSeconds: 1 } }, { type: 'service-start', personId: 8, role: 'customer', membership: 'service', continuity: 'unknown', timeSeconds: 2, source: { kind: 'video', startSeconds: 2, endSeconds: 2 } }, { type: 'queue-join', personId: 9, role: 'staff', membership: 'excluded', continuity: 'continuous', timeSeconds: 1, source: { kind: 'video', startSeconds: 1, endSeconds: 1 } }, { type: 'service-start', personId: 9, role: 'staff', membership: 'excluded', continuity: 'continuous', timeSeconds: 2, source: { kind: 'video', startSeconds: 2, endSeconds: 2 } }, { type: 'queue-join', personId: 10, role: 'unknown', membership: 'waiting', continuity: 'continuous', timeSeconds: 1, source: { kind: 'video', startSeconds: 1, endSeconds: 1 } }, { type: 'service-start', personId: 10, role: 'unknown', membership: 'service', continuity: 'continuous', timeSeconds: 2, source: { kind: 'video', startSeconds: 2, endSeconds: 2 } }, { type: 'queue-join', personId: 11, role: 'customer', membership: 'waiting', continuity: 'continuous', timeSeconds: 1, source: { kind: 'assumption', reason: 'The queue join is not visible.' } }, { type: 'service-start', personId: 11, role: 'customer', membership: 'service', continuity: 'continuous', timeSeconds: 2, source: { kind: 'assumption', reason: 'The service start is not visible.' } }] }) });
+    const review = await jsonFetch(base, `/api/analysis/${synthetic.id}/review`, { method: 'POST', body: JSON.stringify({ topology: 'single-shared-queue', baselinePositions: 1, initialState: { kind: 'empty' }, assumedArrivals: [{ id: 'assumed', arrivalTime: 0, serviceDuration: 2 }], observations: [{ type: 'queue-join', personId: 7, role: 'customer', membership: 'waiting', continuity: 'continuous', timeSeconds: 1, source: { kind: 'video', startSeconds: 1, endSeconds: 1 } }, { type: 'service-start', personId: 7, role: 'customer', membership: 'service', continuity: 'continuous', timeSeconds: 2, source: { kind: 'video', startSeconds: 2, endSeconds: 2 } }, { type: 'service-end', personId: 7, role: 'customer', membership: 'service', continuity: 'continuous', timeSeconds: 4, source: { kind: 'video', startSeconds: 4, endSeconds: 4 } }, { type: 'service-start', personId: 12, role: 'customer', membership: 'service', continuity: 'continuous', timeSeconds: 2, source: { kind: 'video', startSeconds: 2, endSeconds: 2 } }, { type: 'departure', personId: 12, role: 'customer', membership: 'service', continuity: 'continuous', timeSeconds: 4, source: { kind: 'video', startSeconds: 4, endSeconds: 4 } }, { type: 'queue-join', personId: 8, role: 'customer', membership: 'waiting', continuity: 'unknown', timeSeconds: 1, source: { kind: 'video', startSeconds: 1, endSeconds: 1 } }, { type: 'service-start', personId: 8, role: 'customer', membership: 'service', continuity: 'unknown', timeSeconds: 2, source: { kind: 'video', startSeconds: 2, endSeconds: 2 } }, { type: 'queue-join', personId: 9, role: 'staff', membership: 'excluded', continuity: 'continuous', timeSeconds: 1, source: { kind: 'video', startSeconds: 1, endSeconds: 1 } }, { type: 'service-start', personId: 9, role: 'staff', membership: 'excluded', continuity: 'continuous', timeSeconds: 2, source: { kind: 'video', startSeconds: 2, endSeconds: 2 } }, { type: 'queue-join', personId: 10, role: 'unknown', membership: 'waiting', continuity: 'continuous', timeSeconds: 1, source: { kind: 'video', startSeconds: 1, endSeconds: 1 } }, { type: 'service-start', personId: 10, role: 'unknown', membership: 'service', continuity: 'continuous', timeSeconds: 2, source: { kind: 'video', startSeconds: 2, endSeconds: 2 } }, { type: 'queue-join', personId: 11, role: 'customer', membership: 'waiting', continuity: 'continuous', timeSeconds: 1, source: { kind: 'assumption', reason: 'The queue join is not visible.' } }, { type: 'service-start', personId: 11, role: 'customer', membership: 'service', continuity: 'continuous', timeSeconds: 2, source: { kind: 'assumption', reason: 'The service start is not visible.' } }] }) });
     assert.equal(review.response.status, 200);
     assert.equal(review.body.review.completeWaitCount, 1);
     assert.equal(review.body.review.completeWaits[0].source.start.endSeconds, 1);
@@ -126,7 +126,28 @@ test('synthetic analysis source reviews continuous video events and preserves bo
     assert.equal(review.body.review.incompleteCases.some((item) => item.personId === 10 && item.reason === 'person-role-not-reviewed'), true);
     assert.equal(review.body.review.incompleteCases.some((item) => item.personId === 11 && item.reason === 'observation-not-video-supported'), true);
     assert.equal(review.body.review.excludedObservations.some((item) => item.personId === 9), true);
+    assert.equal(review.body.review.serviceDurations.some((item) => item.personId === 12), false);
   }, application);
+});
+
+test('review rejects video evidence outside the clip or outside its supporting interval', async () => {
+  await withServer(async (base) => {
+    const prepared = await jsonFetch(base, '/api/analysis/prepared');
+    const id = prepared.body.analysis.id;
+    const outsideInterval = await jsonFetch(base, `/api/analysis/${id}/review`, {
+      method: 'POST',
+      body: JSON.stringify({ topology: 'single-shared-queue', baselinePositions: 1, initialState: { kind: 'empty' }, observations: [{ type: 'queue-join', personId: 41, role: 'customer', membership: 'waiting', continuity: 'continuous', timeSeconds: 4, source: { kind: 'video', startSeconds: 5, endSeconds: 6 } }] }),
+    });
+    assert.equal(outsideInterval.response.status, 400);
+    assert.match(outsideInterval.body.error, /supporting video interval/i);
+
+    const outsideClip = await jsonFetch(base, `/api/analysis/${id}/review`, {
+      method: 'POST',
+      body: JSON.stringify({ topology: 'single-shared-queue', baselinePositions: 1, initialState: { kind: 'empty' }, zones: [{ id: 'bad-zone', label: 'Bad zone', kind: 'waiting', x: 0, y: 0, width: 0.2, height: 0.2, source: { kind: 'video', startSeconds: 35, endSeconds: 37 } }] }),
+    });
+    assert.equal(outsideClip.response.status, 400);
+    assert.match(outsideClip.body.error, /clip duration/i);
+  });
 });
 
 test('review rejects implicit initial state, unsupported topology, and untrusted evidence claims', async () => {

@@ -168,8 +168,8 @@ function renderComparison(comparison) {
   const reduction = comparison.baseline.meanWaitingTime - comparison.intervention.meanWaitingTime;
   const reductionLabel = reduction === 0 ? 'No change' : reduction > 0 ? `${formatSeconds(reduction)} less` : `${formatSeconds(Math.abs(reduction))} more`;
   document.querySelector('#metric-strip').innerHTML = `
-    <div class="metric baseline-metric"><span>Baseline wait</span><strong>${formatSeconds(comparison.baseline.meanWaitingTime)}</strong><small>${comparison.baselinePositions} position${comparison.baselinePositions === 1 ? '' : 's'}</small></div>
-    <div class="metric intervention-metric"><span>Intervention wait</span><strong>${formatSeconds(comparison.intervention.meanWaitingTime)}</strong><small>${comparison.interventionPositions} positions</small></div>
+    <div class="metric baseline-metric"><span>Simulated mean waiting time · baseline</span><strong>${formatSeconds(comparison.baseline.meanWaitingTime)}</strong><small>${comparison.baselinePositions} position${comparison.baselinePositions === 1 ? '' : 's'}</small></div>
+    <div class="metric intervention-metric"><span>Simulated mean waiting time · intervention</span><strong>${formatSeconds(comparison.intervention.meanWaitingTime)}</strong><small>${comparison.interventionPositions} positions</small></div>
     <div class="metric delta-metric"><span>Difference</span><strong>${reductionLabel}</strong><small>absolute difference · model v${comparison.modelVersion}</small></div>`;
   const maxQueue = Math.max(1, ...comparison.queueLengthTimelines.baseline.map((point) => point.queueLength), ...comparison.queueLengthTimelines.intervention.map((point) => point.queueLength));
   const times = [...new Set([...comparison.queueLengthTimelines.baseline, ...comparison.queueLengthTimelines.intervention].map((point) => point.time))].sort((a, b) => a - b);

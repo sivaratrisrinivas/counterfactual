@@ -16,11 +16,14 @@ const requiredString = (value, name) => {
   return value.trim();
 };
 
-function validReference(reference, name) {
+function validReference(reference, name, durationSeconds) {
   if (!isRecord(reference)) throw new AnalysisError(`${name} must retain its evidence reference.`);
   const kind = requiredString(reference.kind, `${name}.kind`);
   if (!['video', 'assumption', 'unsupported'].includes(kind)) throw new AnalysisError(`${name}.kind is not supported.`);
-  if (kind === 'video' && (!finite(reference.startSeconds) || reference.startSeconds < 0 || (reference.endSeconds !== undefined && (!finite(reference.endSeconds) || reference.endSeconds < reference.startSeconds)))) throw new AnalysisError(`${name} has an invalid video interval.`);
+  if (kind === 'video') {
+    const endSeconds = reference.endSeconds === undefined ? reference.startSeconds : reference.endSeconds;
+    if (!finite(reference.startSeconds) || !finite(endSeconds) || reference.startSeconds < 0 || endSeconds < reference.startSeconds || reference.startSeconds > durationSeconds || endSeconds > durationSeconds) throw new AnalysisError(`${name} must be within the clip duration.`);
+  }
   if (kind === 'assumption') requiredString(reference.reason, `${name}.reason`);
   return { ...reference, kind };
 }
@@ -32,11 +35,11 @@ function normalizeBox(box, name) {
   return { x1: box.x1, y1: box.y1, x2: box.x2, y2: box.y2, width: box.width, height: box.height };
 }
 
-function normalizeZone(zone, name) {
+function normalizeZone(zone, name, durationSeconds) {
   if (!isRecord(zone)) throw new AnalysisError(`${name} must be an object.`);
   for (const key of ['x', 'y', 'width', 'height']) if (!finite(zone[key]) || zone[key] < 0 || zone[key] > 1) throw new AnalysisError(`${name}.${key} must be normalized from 0 to 1.`);
   if (!zone.width || !zone.height || zone.x + zone.width > 1 || zone.y + zone.height > 1) throw new AnalysisError(`${name} is outside the frame.`);
-  return { ...zone, id: requiredString(zone.id, `${name}.id`), label: requiredString(zone.label, `${name}.label`), kind: ['waiting', 'service', 'unknown'].includes(zone.kind) ? zone.kind : 'unknown', source: validReference(zone.source, `${name}.source`) };
+  return { ...zone, id: requiredString(zone.id, `${name}.id`), label: requiredString(zone.label, `${name}.label`), kind: ['waiting', 'service', 'unknown'].includes(zone.kind) ? zone.kind : 'unknown', source: validReference(zone.source, `${name}.source`, durationSeconds) };
 }
 
 function normalizeDetectionFrame(frame, index, durationSeconds) {
@@ -48,7 +51,12 @@ function normalizeEvent(event, index, durationSeconds) {
   if (!isRecord(event)) throw new AnalysisError(`Candidate event ${index + 1} must be an object.`);
   const type = requiredString(event.type, `Candidate event ${index + 1}.type`);
   if (!['queue-join', 'service-start', 'service-end', 'departure'].includes(type) || !finite(event.timeSeconds) || event.timeSeconds < 0 || event.timeSeconds > durationSeconds) throw new AnalysisError(`Candidate event ${index + 1} is invalid.`);
-  return { ...event, type, personId: event.personId ?? null, continuity: event.continuity ?? 'unknown', role: event.role ?? 'unknown', membership: event.membership ?? 'unknown', source: validReference(event.source, `Candidate event ${index + 1}.source`) };
+  const source = validReference(event.source, `Candidate event ${index + 1}.source`, durationSeconds);
+  if (source.kind === 'video') {
+    const sourceEndSeconds = source.endSeconds === undefined ? source.startSeconds : source.endSeconds;
+    if (event.timeSeconds < source.startSeconds || event.timeSeconds > sourceEndSeconds) throw new AnalysisError(`Candidate event ${index + 1}.timeSeconds must fall within its supporting video interval.`);
+  }
+  return { ...event, type, personId: event.personId ?? null, continuity: event.continuity ?? 'unknown', role: event.role ?? 'unknown', membership: event.membership ?? 'unknown', source };
 }
 
 function normalizeDetectionFrames(frames, durationSeconds) {
@@ -69,7 +77,7 @@ export function validateAnalysis(input) {
     clip: { id: requiredString(input.clip.id, 'clip.id'), filename: requiredString(input.clip.filename, 'clip.filename'), durationSeconds, width: input.clip.width, height: input.clip.height, sourceUrl: requiredString(input.clip.sourceUrl, 'clip.sourceUrl'), licenseUrl: requiredString(input.clip.licenseUrl, 'clip.licenseUrl'), attribution: requiredString(input.clip.attribution, 'clip.attribution') },
     provenance: { analysisMode: requiredString(input.provenance?.analysisMode, 'provenance.analysisMode'), savedAt: requiredString(input.provenance?.savedAt, 'provenance.savedAt'), processedFps: input.provenance?.processedFps, processedFrameCount: input.provenance?.processedFrameCount, models: { segmentation: requiredString(input.provenance?.models?.segmentation, 'segmentation model'), interpretation: requiredString(input.provenance?.models?.interpretation, 'interpretation model') } },
     detections: normalizeDetectionFrames(input.detections, durationSeconds),
-    candidateZones: Array.isArray(input.candidateZones) ? input.candidateZones.map((zone, index) => normalizeZone(zone, `candidateZones[${index}]`)) : [],
+    candidateZones: Array.isArray(input.candidateZones) ? input.candidateZones.map((zone, index) => normalizeZone(zone, `candidateZones[${index}]`, durationSeconds)) : [],
     candidateEvents: Array.isArray(input.candidateEvents) ? input.candidateEvents.map((event, index) => normalizeEvent(event, index, durationSeconds)) : [],
     limitations: Array.isArray(input.limitations) ? input.limitations.map((value, index) => requiredString(value, `limitations[${index}]`)) : [],
     assessment: isRecord(input.assessment) ? structuredClone(input.assessment) : {},
@@ -107,7 +115,7 @@ export function reviewAnalysis(analysis, corrections = {}) {
   for (const [personId, events] of byPerson) {
     const join = events.find((event) => event.type === 'queue-join');
     const start = events.find((event) => event.type === 'service-start');
-    const end = events.find((event) => event.type === 'service-end' || event.type === 'departure');
+    const end = events.find((event) => event.type === 'service-end');
     const reviewedCustomer = join?.role === 'customer' && start?.role === 'customer';
     const videoSupported = join?.source.kind === 'video' && start?.source.kind === 'video';
     const traceable = reviewedCustomer && videoSupported && join.continuity === 'continuous' && start.continuity === 'continuous';
@@ -121,7 +129,7 @@ export function reviewAnalysis(analysis, corrections = {}) {
   const assumptions = corrections.assumptions ?? [];
   const proposedArrivals = corrections.assumedArrivals ?? [];
   const inputFingerprint = JSON.stringify({ baselinePositions, arrivals: proposedArrivals, initialState: { kind: 'empty' } });
-  return { analysisId: normalized.id, analysisStatus: normalized.status, reviewVersion: 1, reviewedAt: new Date().toISOString(), topology: corrections.topology ?? 'single-shared-queue', zones: Array.isArray(corrections.zones) && corrections.zones.length ? corrections.zones.map((zone, index) => normalizeZone(zone, `reviewed zones[${index}]`)) : normalized.candidateZones, observations, excludedObservations, roleExclusions: corrections.roleExclusions ?? ['staff', 'background pedestrians', 'people already receiving service'], completeWaits, incompleteCases, serviceDurations, completeWaitCount: completeWaits.length, completeWaitMeanSeconds: completeWaits.length ? completeWaits.reduce((sum, item) => sum + item.waitingTimeSeconds, 0) / completeWaits.length : null, limitations: [...normalized.limitations], assumptions, evidenceStatus, calibrationStatus: normalized.qualification.calibrationEligible ? 'calibration-eligible-pending-review' : 'insufficient-for-calibration', qualification: normalized.qualification, proposedModelInputs: { baselinePositions, arrivals: proposedArrivals, initialState: corrections.initialState, evidenceReview: { analysisId: normalized.id, reviewVersion: 1, evidenceStatus, inputFingerprint } } };
+  return { analysisId: normalized.id, analysisStatus: normalized.status, reviewVersion: 1, reviewedAt: new Date().toISOString(), topology: corrections.topology ?? 'single-shared-queue', zones: Array.isArray(corrections.zones) && corrections.zones.length ? corrections.zones.map((zone, index) => normalizeZone(zone, `reviewed zones[${index}]`, normalized.clip.durationSeconds)) : normalized.candidateZones, observations, excludedObservations, roleExclusions: corrections.roleExclusions ?? ['staff', 'background pedestrians', 'people already receiving service'], completeWaits, incompleteCases, serviceDurations, completeWaitCount: completeWaits.length, completeWaitMeanSeconds: completeWaits.length ? completeWaits.reduce((sum, item) => sum + item.waitingTimeSeconds, 0) / completeWaits.length : null, limitations: [...normalized.limitations], assumptions, evidenceStatus, calibrationStatus: normalized.qualification.calibrationEligible ? 'calibration-eligible-pending-review' : 'insufficient-for-calibration', qualification: normalized.qualification, proposedModelInputs: { baselinePositions, arrivals: proposedArrivals, initialState: corrections.initialState, evidenceReview: { analysisId: normalized.id, reviewVersion: 1, evidenceStatus, inputFingerprint } } };
 }
 
 let preparedAnalysisPromise;

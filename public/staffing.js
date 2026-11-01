@@ -83,4 +83,3 @@ if (shell) {
     requestInput.value = '';
   });
 }
-

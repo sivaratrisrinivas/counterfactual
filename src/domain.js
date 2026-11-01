@@ -124,11 +124,12 @@ export function simulate(modelInput, positions) {
   }));
   const waitingTimes = customers.map((customer) => customer.waitingTime);
   const meanWaitingTime = waitingTimes.reduce((sum, value) => sum + value, 0) / waitingTimes.length;
+  const eventOrder = { departure: 0, arrival: 1, 'service-start': 2 };
   const events = customers.flatMap((customer) => [
     { type: 'arrival', customerId: customer.id, time: customer.arrivalTime },
     { type: 'service-start', customerId: customer.id, position: customer.position, time: customer.serviceStartTime },
     { type: 'departure', customerId: customer.id, position: customer.position, time: customer.serviceEndTime },
-  ]).sort((a, b) => a.time - b.time || (a.type === 'arrival' ? -1 : 1));
+  ]).sort((a, b) => a.time - b.time || eventOrder[a.type] - eventOrder[b.type] || String(a.customerId).localeCompare(String(b.customerId)) || (a.position ?? 0) - (b.position ?? 0));
   return {
     positions,
     customers,
