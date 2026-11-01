@@ -61,7 +61,9 @@ function renderAnalysis(analysis) {
   document.querySelector('#analysis-verdict').innerHTML = `<span class="verdict-label">Qualification</span><strong>${qualificationLabel}</strong><p>${escapeHtml(analysis.qualification.rationale)}</p>`;
   document.querySelector('#analysis-limitations').innerHTML = analysis.limitations.map((limitation) => `<li>${escapeHtml(limitation)}</li>`).join('');
   const sourceLabel = analysis.status === 'fresh' ? 'user upload · rights unverified' : 'prepared footage';
-  document.querySelector('#analysis-source').innerHTML = `Source: <a href="${escapeHtml(analysis.clip.sourceUrl)}" target="_blank" rel="noreferrer">${sourceLabel}</a> · <a href="${escapeHtml(analysis.clip.licenseUrl)}" target="_blank" rel="noreferrer">rights note</a>`;
+  document.querySelector('#analysis-source').innerHTML = analysis.status === 'fresh'
+    ? `Source: ${sourceLabel}. Counterfactual has not verified usage rights for this upload.`
+    : `Source: <a href="${escapeHtml(analysis.clip.sourceUrl)}" target="_blank" rel="noreferrer">${sourceLabel}</a> · <a href="${escapeHtml(analysis.clip.licenseUrl)}" target="_blank" rel="noreferrer">rights note</a>`;
   document.querySelector('#evidence-zones').value = JSON.stringify(analysis.candidateZones, null, 2);
   document.querySelector('#evidence-events').value = JSON.stringify(analysis.candidateEvents, null, 2);
   const people = [...new Map(analysis.detections.flatMap((frame) => frame.people.map((person) => [person.id, person]))).values()].slice(0, 8);
