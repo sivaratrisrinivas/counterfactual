@@ -3,9 +3,10 @@ import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ModelWorkflow, WorkflowError } from './domain.js';
+import { AnalysisError, loadPreparedAnalysis, reviewAnalysis } from './analysis.js';
 
 const publicDirectory = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'public');
-const contentTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+const contentTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.mp4': 'video/mp4' };
 
 function sendJson(response, status, body) {
   const payload = JSON.stringify(body);
@@ -29,7 +30,7 @@ async function readJson(request) {
 
 async function serveStatic(response, pathname) {
   const relative = pathname === '/' ? 'index.html' : pathname.slice(1);
-  if (!['index.html', 'app.js', 'styles.css'].includes(relative)) return false;
+  if (!['index.html', 'app.js', 'styles.css', 'evidence.js', 'media/prepared-checkout.mp4'].includes(relative)) return false;
   try {
     const content = await readFile(join(publicDirectory, relative));
     response.writeHead(200, { 'content-type': contentTypes[extname(relative)] });
@@ -51,6 +52,17 @@ export function createRequestHandler(application = createApplication()) {
     const url = new URL(request.url, 'http://localhost');
     try {
       if (request.method === 'GET' && await serveStatic(response, url.pathname)) return;
+      if (request.method === 'GET' && url.pathname === '/api/analysis/prepared') {
+        sendJson(response, 200, { analysis: await loadPreparedAnalysis() });
+        return;
+      }
+      const analysisReview = url.pathname.match(/^\/api\/analysis\/([^/]+)\/review$/);
+      if (request.method === 'POST' && analysisReview) {
+        const analysis = await loadPreparedAnalysis();
+        if (analysisReview[1] !== analysis.id) throw new AnalysisError('Analysis was not found.', 404);
+        sendJson(response, 200, { review: reviewAnalysis(analysis, await readJson(request)) });
+        return;
+      }
       const match = url.pathname.match(/^\/api\/models(?:\/([^/]+)(?:\/(review|compare))?)?$/);
       if (!match) {
         sendJson(response, 404, { error: 'Not found.' });
@@ -74,7 +86,7 @@ export function createRequestHandler(application = createApplication()) {
         sendJson(response, 405, { error: 'Method not allowed.' });
       }
     } catch (error) {
-      const status = error instanceof WorkflowError ? error.status : 500;
+      const status = error instanceof WorkflowError || error instanceof AnalysisError ? error.status : 500;
       sendJson(response, status, { error: status === 500 ? 'The server could not complete that request.' : error.message });
     }
   };

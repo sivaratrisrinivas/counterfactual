@@ -1,4 +1,4 @@
-const state = { model: null, comparison: null };
+const state = { model: null, comparison: null, evidenceReview: null };
 const arrivalList = document.querySelector('#arrival-list');
 const modelForm = document.querySelector('#model-form');
 const reviewButton = document.querySelector('#review-button');
@@ -64,6 +64,7 @@ function collectInputs() {
     baselinePositions: Number(document.querySelector('#baseline-positions').value),
     arrivals,
     initialState: { kind: document.querySelector('#initial-state').value },
+    ...(state.evidenceReview ? { evidenceReview: state.evidenceReview } : {}),
   };
 }
 
@@ -168,3 +169,14 @@ function renderComparison(comparison) {
 addArrivalRow({ arrivalTime: 0, serviceDuration: 5 });
 addArrivalRow({ arrivalTime: 1, serviceDuration: 5 });
 addArrivalRow({ arrivalTime: 2, serviceDuration: 5 });
+
+document.addEventListener('counterfactual:evidence-reviewed', (event) => {
+  const inputs = event.detail.proposedModelInputs;
+  state.evidenceReview = inputs.evidenceReview;
+  document.querySelector('#baseline-positions').value = inputs.baselinePositions;
+  arrivalList.innerHTML = '';
+  for (const arrival of inputs.arrivals) addArrivalRow(arrival);
+  document.querySelector('#initial-state').value = inputs.initialState.kind;
+  document.querySelector('#workflow-status').textContent = 'Evidence reviewed · save model inputs';
+  showNotice('Evidence review is ready. Save these explicit inputs before confirming the reviewed model.', 'success');
+});

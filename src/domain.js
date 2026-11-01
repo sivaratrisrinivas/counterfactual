@@ -66,7 +66,18 @@ export function normalizeModelInput(input) {
     baselinePositions: input.baselinePositions,
     arrivals,
     initialState: { kind: 'empty' },
+    evidenceReview: input.evidenceReview === undefined ? null : normalizeEvidenceReview(input.evidenceReview),
   };
+}
+
+function normalizeEvidenceReview(value) {
+  ensureObject(value, 'Evidence review must be an object.');
+  if (typeof value.analysisId !== 'string' || !value.analysisId.trim()) throw new WorkflowError('Evidence review needs an analysis id.');
+  if (!Number.isInteger(value.reviewVersion) || value.reviewVersion < 1) throw new WorkflowError('Evidence review needs a review version.');
+  const status = ['qualified-observations', 'exploratory-assumptions-required'].includes(value.evidenceStatus)
+    ? value.evidenceStatus
+    : 'exploratory-assumptions-required';
+  return { analysisId: value.analysisId, reviewVersion: value.reviewVersion, evidenceStatus: status };
 }
 
 function uniqueSorted(values) {
@@ -204,6 +215,8 @@ export class ModelWorkflow {
         ? 'Relative change is not shown because baseline waiting time is zero.'
         : null,
       assumptions: [...model.assumptions],
+      evidenceReview: model.evidenceReview,
+      evidenceStatus: model.evidenceReview?.evidenceStatus ?? 'exploratory-assumptions-required',
       predictionStatus: 'Unvalidated model prediction',
       createdAt: new Date().toISOString(),
     };
