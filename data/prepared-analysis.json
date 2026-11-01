@@ -57,12 +57,10 @@
     ] }
   ],
   "candidateZones": [
-    { "id": "waiting-area-candidate", "label": "Waiting area candidate", "kind": "waiting", "x": 0.02, "y": 0.3, "width": 0.3, "height": 0.55, "source": { "kind": "video", "startSeconds": 6, "endSeconds": 35.8 } },
+    { "id": "waiting-area-candidate", "label": "Hypothetical waiting area", "kind": "waiting", "x": 0.02, "y": 0.3, "width": 0.3, "height": 0.55, "source": { "kind": "assumption", "reason": "No formed shared queue or waiting boundary is established in the saved analysis." } },
     { "id": "service-area-candidate", "label": "Service counter candidate", "kind": "service", "x": 0.1, "y": 0.18, "width": 0.45, "height": 0.75, "source": { "kind": "video", "startSeconds": 10, "endSeconds": 35.8 } }
   ],
-  "candidateEvents": [
-    { "type": "service-start", "personId": 9, "timeSeconds": 10, "source": { "kind": "video", "startSeconds": 10, "endSeconds": 10 } }
-  ],
+  "candidateEvents": [],
   "limitations": [
     "No formed shared queue or visible queue entrance is established.",
     "No complete queue-join and service-start episode is visible for a reviewed person.",

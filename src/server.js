@@ -46,14 +46,15 @@ async function serveStatic(response, pathname) {
 
 export function createApplication({ staffingProvider, analysisSource } = {}) {
   const evidenceReviews = new Map();
+  const latestEvidenceReviewVersions = new Map();
   const source = analysisSource ?? (async (analysisId) => {
     const analysis = await loadPreparedAnalysis();
     if (analysis.id !== analysisId) throw new AnalysisError('Analysis was not found.', 404);
     return analysis;
   });
-  const workflow = new ModelWorkflow({ evidenceReviews });
+  const workflow = new ModelWorkflow({ evidenceReviews, latestEvidenceReviewVersions });
   const staffing = new StaffingWorkflow(workflow, { provider: staffingProvider });
-  return { workflow, staffing, analysisSource: source, evidenceReviews };
+  return { workflow, staffing, analysisSource: source, evidenceReviews, latestEvidenceReviewVersions };
 }
 
 export function createRequestHandler(application = createApplication()) {
@@ -69,6 +70,10 @@ export function createRequestHandler(application = createApplication()) {
       if (request.method === 'POST' && analysisReview) {
         const analysis = await application.analysisSource(analysisReview[1]);
         const review = reviewAnalysis(analysis, await readJson(request));
+        const reviewVersion = (application.latestEvidenceReviewVersions.get(review.analysisId) ?? 0) + 1;
+        review.reviewVersion = reviewVersion;
+        review.proposedModelInputs.evidenceReview.reviewVersion = reviewVersion;
+        application.latestEvidenceReviewVersions.set(review.analysisId, reviewVersion);
         application.evidenceReviews.set(`${review.analysisId}:${review.reviewVersion}`, review);
         sendJson(response, 200, { review });
         return;

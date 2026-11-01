@@ -141,7 +141,7 @@ export class StaffingWorkflow {
 
   async interpret(modelId, request) {
     const text = boundedRequest(request);
-    const model = this.#modelWorkflow.get(modelId);
+    const model = this.#modelWorkflow.getCurrent(modelId);
     if (!model.reviewed) throw new WorkflowError('Review the current model before asking for a staffing interpretation.', 409);
     let result;
     try {
@@ -178,7 +178,7 @@ export class StaffingWorkflow {
     const proposal = this.#proposals.get(proposalId);
     if (!proposal || proposal.modelId !== modelId) throw new WorkflowError('This staffing interpretation was not found.', 404);
     if (proposal.status === 'unsupported') throw new WorkflowError('This request is unsupported. Use the explicit staffing control for a position-count what-if.', 422);
-    const model = this.#modelWorkflow.get(modelId);
+    const model = this.#modelWorkflow.getCurrent(modelId);
     if (!model.reviewed || model.version !== proposal.modelVersion) {
       throw new WorkflowError('This staffing interpretation is stale. Review the current model and request a fresh interpretation.', 409);
     }

@@ -162,5 +162,16 @@ test('the browser workflow exposes the computed playback surface', async () => {
     assert.match(moduleSource, /renderPlayback/);
     assert.match(moduleSource, /service-start/);
     assert.match(moduleSource, /queueLengthTimeline/);
+
+    const app = await fetch(`${base}/app.js`);
+    const appSource = await app.text();
+    assert.equal(app.status, 200);
+    assert.match(appSource, /counterfactual:evidence-invalidated/);
+    assert.match(appSource, /evidenceReviewStale/);
+
+    const evidence = await fetch(`${base}/evidence.js`);
+    const evidenceSource = await evidence.text();
+    assert.equal(evidence.status, 200);
+    assert.match(evidenceSource, /counterfactual:evidence-invalidated/);
   });
 });
