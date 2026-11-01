@@ -9,7 +9,7 @@ import { FreshAnalysisError, FreshAnalysisWorkflow, parseMultipartVideo, UPLOAD_
 
 const publicDirectory = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'public');
 const contentTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.mp4': 'video/mp4' };
-const staticFiles = new Set(['index.html', 'app.js', 'evidence.js', 'staffing.js', 'playback.js', 'styles.css', 'media/prepared-checkout.mp4']);
+const staticFiles = new Set(['index.html', 'app.js', 'evidence.js', 'staffing.js', 'playback.js', 'upload.js', 'styles.css', 'media/prepared-checkout.mp4']);
 
 function sendJson(response, status, body) {
   const payload = JSON.stringify(body);
