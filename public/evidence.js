@@ -75,6 +75,15 @@ function showReview(review) {
   document.dispatchEvent(new CustomEvent('counterfactual:evidence-reviewed', { detail: review }));
 }
 
+function markReviewEdited() {
+  if (!analysisState.review) return;
+  analysisState.review = null;
+  const result = document.querySelector('#evidence-review-result');
+  result.hidden = false;
+  result.innerHTML = '<strong>Evidence review changed.</strong><span>Re-review these evidence inputs before saving the model again.</span>';
+  document.dispatchEvent(new CustomEvent('counterfactual:evidence-invalidated'));
+}
+
 reviewForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const button = reviewForm.querySelector('button[type="submit"]');
@@ -98,6 +107,9 @@ reviewForm.addEventListener('submit', async (event) => {
     document.querySelector('#evidence-review-result').textContent = error.message;
   } finally { button.disabled = false; }
 });
+
+reviewForm.addEventListener('input', markReviewEdited);
+reviewForm.addEventListener('change', markReviewEdited);
 
 video.addEventListener('timeupdate', drawOverlay);
 video.addEventListener('loadedmetadata', drawOverlay);

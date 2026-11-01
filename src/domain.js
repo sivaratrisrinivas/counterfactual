@@ -144,8 +144,12 @@ export function simulate(modelInput, positions) {
 export class ModelWorkflow {
   #models = new Map();
   #evidenceReviews;
+  #latestEvidenceReviewVersions;
 
-  constructor({ evidenceReviews = new Map() } = {}) { this.#evidenceReviews = evidenceReviews; }
+  constructor({ evidenceReviews = new Map(), latestEvidenceReviewVersions = new Map() } = {}) {
+    this.#evidenceReviews = evidenceReviews;
+    this.#latestEvidenceReviewVersions = latestEvidenceReviewVersions;
+  }
 
   create(input) {
     const normalized = normalizeModelInput(input);
@@ -170,6 +174,7 @@ export class ModelWorkflow {
   update(id, input) {
     const current = this.#getMutable(id);
     const normalized = normalizeModelInput(input);
+    if (current.evidenceReview && !normalized.evidenceReview) throw new WorkflowError('This model uses reviewed evidence. Include a fresh evidence review before saving changes.', 409);
     normalized.evidenceReview = this.#trustedEvidence(normalized.evidenceReview, normalized);
     const next = {
       ...current,
@@ -185,6 +190,7 @@ export class ModelWorkflow {
 
   review(id, expectedVersion) {
     const model = this.#getMutable(id);
+    this.#assertCurrentEvidence(model);
     if (!Number.isInteger(expectedVersion) || expectedVersion !== model.version) {
       throw new WorkflowError('This model changed before review. Refresh the inputs and review the current version.', 409);
     }
@@ -195,6 +201,7 @@ export class ModelWorkflow {
 
   compare(id, reviewedVersion, interventionPositions) {
     const model = this.#getMutable(id);
+    this.#assertCurrentEvidence(model);
     if (!model.reviewed || reviewedVersion !== model.version) {
       throw new WorkflowError('Review this current model before running a what-if. The previous review or comparison is stale.', 409);
     }
@@ -240,11 +247,19 @@ export class ModelWorkflow {
     return model;
   }
 
+  getCurrent(id) {
+    const model = this.#getMutable(id);
+    this.#assertCurrentEvidence(model);
+    return this.#view(model);
+  }
+
   #trustedEvidence(summary, normalized) {
     if (!summary) return null;
     const key = `${summary.analysisId}:${summary.reviewVersion}`;
     const trusted = this.#evidenceReviews.get(key);
     if (!trusted) throw new WorkflowError('Evidence review is not trusted by this server. Review the analysis before saving model inputs.', 409);
+    const latestVersion = this.#latestEvidenceReviewVersions.get(summary.analysisId);
+    if (latestVersion && summary.reviewVersion < latestVersion) throw new WorkflowError('This evidence review is stale. Re-review the evidence before saving model inputs.', 409);
     const evidence = structuredClone(trusted);
     const trustedFingerprint = trusted.proposedModelInputs?.evidenceReview?.inputFingerprint;
     if (!trustedFingerprint || trustedFingerprint !== modelInputFingerprint(normalized)) {
@@ -253,6 +268,12 @@ export class ModelWorkflow {
       evidence.assumptions = [...(evidence.assumptions ?? []), 'Model timings or arrivals were edited after evidence review and are treated as assumptions.'];
     }
     return evidence;
+  }
+
+  #assertCurrentEvidence(model) {
+    if (!model.evidenceReview) return;
+    const latestVersion = this.#latestEvidenceReviewVersions.get(model.evidenceReview.analysisId);
+    if (latestVersion && model.evidenceReview.reviewVersion < latestVersion) throw new WorkflowError('This model uses a stale evidence review. Re-review the evidence before comparing or requesting staffing.', 409);
   }
 
   #view(model) {
