@@ -218,6 +218,23 @@ document.addEventListener('counterfactual:evidence-reviewed', (event) => {
   showNotice('Evidence review is ready. Save these explicit inputs before confirming the reviewed model.', 'success');
 });
 
+document.addEventListener('counterfactual:analysis-source-changed', () => {
+  state.playback?.destroy();
+  state.playback = null;
+  state.model = null;
+  state.comparison = null;
+  state.evidenceReview = null;
+  state.evidenceReviewStale = false;
+  resultSection.hidden = true;
+  reviewButton.disabled = true;
+  document.querySelector('.intervention-button').disabled = true;
+  document.querySelector('#review-facts').hidden = true;
+  document.querySelector('#assumptions').hidden = true;
+  document.querySelector('#review-tag').textContent = 'Not reviewed';
+  document.querySelector('#workflow-status').textContent = 'Choose evidence to begin';
+  document.querySelector('#review-copy').innerHTML = '<p>Save the inputs to see the exact model the what-if will use.</p>';
+});
+
 document.addEventListener('counterfactual:evidence-invalidated', () => {
   state.evidenceReview = null;
   state.evidenceReviewStale = true;
