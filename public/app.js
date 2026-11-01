@@ -77,6 +77,7 @@ async function request(path, options = {}) {
 function renderModel(model) {
   state.model = model;
   state.comparison = null;
+  window.dispatchEvent(new CustomEvent('counterfactual:model-updated', { detail: model }));
   document.querySelector('#fact-arrivals').textContent = `${model.arrivals.length} people`;
   document.querySelector('#fact-baseline').textContent = `${model.baselinePositions} ${model.baselinePositions === 1 ? 'position' : 'positions'}`;
   document.querySelector('#fact-initial').textContent = 'Explicitly empty';
@@ -139,6 +140,7 @@ compareForm.addEventListener('submit', async (event) => {
     });
     state.comparison = result.comparison;
     renderComparison(result.comparison);
+    window.dispatchEvent(new CustomEvent('counterfactual:comparison-updated', { detail: result.comparison }));
     showNotice('Comparison updated from the current reviewed model.', 'success');
   } catch (error) { showNotice(error.message, 'error'); }
 });
@@ -164,6 +166,13 @@ function renderComparison(comparison) {
   document.querySelector('#event-table').innerHTML = `<div class="event-header"><span>Person</span><span>Base</span><span>What-if</span></div>${serviceStarts}`;
   document.querySelector('#result-assumption-list').innerHTML = comparison.assumptions.map((assumption) => `<span>${escapeHtml(assumption)}</span>`).join('');
 }
+
+window.addEventListener('counterfactual:staffing-comparison', (event) => {
+  state.comparison = event.detail;
+  renderComparison(event.detail);
+  resultSection.hidden = false;
+  showNotice('Confirmed staffing interpretation calculated from the reviewed model.', 'success');
+});
 
 addArrivalRow({ arrivalTime: 0, serviceDuration: 5 });
 addArrivalRow({ arrivalTime: 1, serviceDuration: 5 });

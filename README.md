@@ -23,3 +23,9 @@ The tests exercise the public HTTP workflow. They cover review and stale-edit ru
 ## Workflow API
 
 The server keeps models in memory. `POST /api/models` creates a draft from `{ baselinePositions, arrivals, initialState: { kind: "empty" } }`. `POST /api/models/:id/review` confirms the current `version` with `{ expectedVersion }`. `POST /api/models/:id/compare` runs a live deterministic comparison with `{ reviewedVersion, interventionPositions }`. `PUT /api/models/:id` edits inputs and increments the version, which invalidates review and comparisons. A comparison contains both customers' event timelines and waiting times, queue-length timelines, mean waiting times, assumptions, and an explicit unvalidated-prediction status.
+
+## Plain-language staffing requests
+
+After the model is reviewed, `POST /api/models/:id/staffing/interpret` accepts `{ request }` and returns a pending interpretation. The server sends the bounded request to Muse Wonder with a strict JSON schema, validates the returned position count locally, and records the current reviewed-model version. The browser shows the baseline and proposed count before the user confirms it.
+
+Confirmation uses `POST /api/models/:id/staffing/confirm` with `{ proposalId }`. Only this route runs the existing deterministic simulator. A changed model version, unsupported interpretation, malformed provider response, or provider failure cannot run a comparison. The explicit position-count control remains available when interpretation is unavailable. `MODEL_API_KEY` is read only by the server-side adapter.
