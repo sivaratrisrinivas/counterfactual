@@ -138,12 +138,13 @@ export function buildFreshAnalysis({ id, filename, metadata, sam, wonder, savedA
   const episodes = assessment.complete_observable_service_episodes;
   const verdict = assessment.suitability_verdict;
   const eligibility = assessment.calibration_eligibility;
-  const calibrationEligible = eligibility.eligible === true && eligibility.traceable_queue === true && eligibility.traceable_timings === true && assessment.visible_service_positions.length > 0 && episodes.length > 0 && detections.length > 0;
+  const hasPersonLevelQueueEvidence = episodes.some((episode) => Number.isInteger(episode.person_id) && Number.isFinite(episode.queue_join_seconds) && Number.isFinite(episode.service_start_seconds));
+  const calibrationEligible = eligibility.eligible === true && eligibility.traceable_queue === true && eligibility.traceable_timings === true && hasPersonLevelQueueEvidence && assessment.visible_service_positions.length > 0 && episodes.length > 0 && detections.length > 0;
   const candidateEvents = episodes.flatMap((episode) => [
     { type: 'service-start', personId: null, timeSeconds: episode.start_seconds, continuity: 'unknown', role: 'unknown', membership: 'service', source: { kind: 'video', startSeconds: episode.start_seconds, endSeconds: episode.start_seconds } },
     { type: 'service-end', personId: null, timeSeconds: episode.end_seconds, continuity: 'unknown', role: 'unknown', membership: 'service', source: { kind: 'video', startSeconds: episode.end_seconds, endSeconds: episode.end_seconds } },
   ]);
-  const limitations = [assessment.camera_motion, assessment.queue_topology_and_uncertainty, ...assessment.occlusion_problems, ...assessment.measurements_not_supported, 'Service episodes have no machine-readable person identity; review candidate events before using timings.', ...(!calibrationEligible ? ['Calibration eligibility is pending human review because traceable queue and timing evidence is incomplete.'] : [])].filter(Boolean);
+  const limitations = [assessment.camera_motion, assessment.queue_topology_and_uncertainty, ...assessment.occlusion_problems, ...assessment.measurements_not_supported, 'Provider service episodes have no person-level queue joins or machine-readable identity; review candidate proposals before using timings.', ...(!calibrationEligible ? ['Calibration eligibility is pending human review because traceable queue and timing evidence is incomplete.'] : [])].filter(Boolean);
   const analysis = {
     schemaVersion: 1, id, status: 'fresh',
     clip: { id, filename, durationSeconds: metadata.durationSeconds, width: metadata.width, height: metadata.height, sourceUrl: 'https://example.invalid/user-upload', licenseUrl: 'https://example.invalid/user-upload-rights', attribution: 'Uploaded by the user; media rights were not verified by Counterfactual.', videoUrl: `/api/analysis/uploads/${id}/video` },
@@ -170,6 +171,7 @@ export function createMetaAnalysisProvider({ apiKey = process.env.MODEL_API_KEY,
     const wonderResponse = await fetchImpl('https://api.meta.ai/v1/responses', { method: 'POST', headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' }, body: JSON.stringify({ model: 'muse-wonder-1.0', input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Inspect this video for visible queue structure and evidence. Do not invent timings. Return only the requested JSON.' }, { type: 'input_video', file_id: file.id }] }], max_output_tokens: 1800, reasoning: { effort: 'low' }, text: { format: { type: 'json_schema', name: 'counterfactual_scene', strict: true, schema: WONDER_SCHEMA } } }), signal: AbortSignal.timeout(UPLOAD_LIMITS.timeoutMs) });
     if (!wonderResponse.ok) throw new FreshAnalysisError('Scene interpretation failed.', 502);
     const wonderPayload = await wonderResponse.json();
+    if (wonderPayload.status !== 'completed') throw new FreshAnalysisError('Scene interpretation did not complete.', 502);
     return { sam, wonder: outputText(wonderPayload), usage: { sam: undefined, wonder: wonderPayload.usage } };
   };
 }

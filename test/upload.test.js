@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { createApplication, startServer } from '../src/server.js';
+import { createMetaAnalysisProvider } from '../src/fresh-analysis.js';
 
 function multipartVideo(bytes, { filename = 'fresh.mp4', type = 'video/mp4' } = {}) {
   const boundary = 'counterfactual-test-boundary';
@@ -98,9 +102,37 @@ test('structured qualifying evidence preserves identity-unknown service proposal
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
     assert.equal(result.upload.status, 'completed');
-    assert.equal(result.upload.analysis.qualification.calibrationEligible, true);
+    assert.equal(result.upload.analysis.qualification.calibrationEligible, false);
     assert.deepEqual(result.upload.analysis.candidateEvents.map((event) => [event.type, event.timeSeconds, event.personId]), [['service-start', 1, null], ['service-end', 2, null]]);
+    assert.match(result.upload.analysis.limitations.join(' '), /identity/i);
   }, application);
+});
+
+test('external Wonder adapter rejects valid JSON in failed or incomplete Responses payloads', async () => {
+  const fixture = {
+    scene_description: 'A visible service lane', camera_motion: 'fixed', visible_service_positions: ['desk'],
+    queue_topology_and_uncertainty: 'The queue is uncertain.', complete_observable_service_episodes: [],
+    occlusion_problems: [], measurements_supported: [], measurements_not_supported: ['queue timings'],
+    suitability_verdict: 'Insufficient.', calibration_eligibility: { eligible: false, traceable_queue: false, traceable_timings: false, rationale: 'No complete queue timings.' },
+  };
+  for (const status of ['failed', 'incomplete']) {
+    const root = await mkdtemp(join(tmpdir(), 'counterfactual-review-'));
+    const videoPath = join(root, 'prepared.mp4');
+    await writeFile(videoPath, 'synthetic video');
+    let responseCount = 0;
+    const fetchImpl = async (url) => {
+      responseCount += 1;
+      if (url.endsWith('/files')) return new Response(JSON.stringify({ id: 'file-1' }), { status: 200 });
+      if (url.endsWith('/responses') && responseCount === 2) return new Response('data: {"type":"response.completed"}\n\ndata: [DONE]\n', { status: 200 });
+      return new Response(JSON.stringify({ status, output_text: JSON.stringify(fixture) }), { status: 200 });
+    };
+    try {
+      const provider = createMetaAnalysisProvider({ apiKey: 'test-key', fetchImpl });
+      await assert.rejects(provider({ videoPath, metadata: { durationSeconds: 4 } }), /Scene interpretation did not complete/i);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }
 });
 
 test('fresh upload rejects invalid media before starting provider work', async () => {

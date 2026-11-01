@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createApplication, startServer } from '../src/server.js';
+import { createWonderStaffingProvider } from '../src/staffing.js';
 
 const syntheticInputs = {
   baselinePositions: 1,
@@ -168,6 +169,17 @@ test('malformed or failed provider responses do not change the reviewed model', 
       assert.equal(current.body.model.reviewed, true);
       assert.equal(current.body.model.lastComparison, null);
     });
+  }
+});
+
+test('external staffing adapter rejects valid JSON in failed or incomplete Responses payloads', async () => {
+  const fixture = { supported: true, targetPositions: 2, explanation: 'Add one independent service position.' };
+  for (const status of ['failed', 'incomplete']) {
+    const provider = createWonderStaffingProvider({
+      apiKey: 'test-key',
+      fetchImpl: async () => new Response(JSON.stringify({ status, output_text: JSON.stringify(fixture) }), { status: 200 }),
+    });
+    await assert.rejects(provider({ request: 'add another service position', baselinePositions: 1 }), /did not complete/i);
   }
 });
 
