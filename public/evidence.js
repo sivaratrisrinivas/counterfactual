@@ -8,7 +8,10 @@ const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => (
 
 function nearestFrame(timeSeconds) {
   const frames = analysisState.analysis?.detections ?? [];
-  return frames.reduce((closest, frame) => Math.abs(frame.timeSeconds - timeSeconds) < Math.abs(closest.timeSeconds - timeSeconds) ? frame : closest, frames[0] ?? { timeSeconds: 0, people: [] });
+  const fps = analysisState.analysis?.provenance?.processedFps ?? 1;
+  const targetFrame = Math.floor(timeSeconds * fps);
+  const frame = frames.find((candidate) => candidate.frameIndex === targetFrame);
+  return frame && Math.abs(frame.timeSeconds - timeSeconds) <= (1 / fps) ? frame : { frameIndex: targetFrame, timeSeconds, people: [] };
 }
 
 function drawOverlay() {
@@ -36,6 +39,16 @@ function drawOverlay() {
     overlayContext.font = '11px system-ui, sans-serif';
     overlayContext.fillText(`${person.id ?? '?'} · ${person.membership}`, x + 3, Math.max(12, y - 4));
   }
+  for (const zone of analysisState.analysis.candidateZones ?? []) {
+    overlayContext.strokeStyle = zone.kind === 'service' ? '#f28f3b' : '#54b98b';
+    overlayContext.setLineDash([6, 4]);
+    overlayContext.lineWidth = 2;
+    overlayContext.strokeRect(zone.x * width, zone.y * height, zone.width * width, zone.height * height);
+    overlayContext.fillStyle = overlayContext.strokeStyle;
+    overlayContext.font = '11px system-ui, sans-serif';
+    overlayContext.fillText(zone.label, zone.x * width + 4, zone.y * height + 14);
+    overlayContext.setLineDash([]);
+  }
   document.querySelector('#video-time').textContent = `${video.currentTime.toFixed(1)}s · frame ${frame.frameIndex ?? 0}`;
 }
 
@@ -49,6 +62,8 @@ function renderAnalysis(analysis) {
   document.querySelector('#analysis-source').innerHTML = `Source: <a href="${escapeHtml(analysis.clip.sourceUrl)}" target="_blank" rel="noreferrer">Pexels footage</a> · <a href="${escapeHtml(analysis.clip.licenseUrl)}" target="_blank" rel="noreferrer">license</a>`;
   document.querySelector('#evidence-zones').value = JSON.stringify(analysis.candidateZones, null, 2);
   document.querySelector('#evidence-events').value = JSON.stringify(analysis.candidateEvents, null, 2);
+  const people = [...new Map(analysis.detections.flatMap((frame) => frame.people.map((person) => [person.id, person]))).values()].slice(0, 8);
+  document.querySelector('#detection-role-editor').innerHTML = `<p class="field-label">Review representative person roles and continuity</p><div class="role-editor-grid">${people.map((person) => `<label>Person ${escapeHtml(person.id)}<select data-person-id="${escapeHtml(person.id)}" class="role-correction"><option value="customer" ${person.role === 'customer' ? 'selected' : ''}>Customer</option><option value="staff" ${person.role === 'staff' ? 'selected' : ''}>Staff</option><option value="background" ${person.role === 'background' ? 'selected' : ''}>Background</option><option value="unknown" ${person.role === 'unknown' ? 'selected' : ''}>Unknown</option></select><select data-person-id="${escapeHtml(person.id)}" class="continuity-correction"><option value="continuous">Continuous</option><option value="unknown" selected>Unknown / review</option><option value="discontinuous">Discontinuous</option></select></label>`).join('')}</div>`;
   drawOverlay();
 }
 
@@ -67,8 +82,14 @@ reviewForm.addEventListener('submit', async (event) => {
   try {
     const zones = JSON.parse(document.querySelector('#evidence-zones').value);
     const observations = JSON.parse(document.querySelector('#evidence-events').value);
+    const roleByPerson = new Map([...document.querySelectorAll('.role-correction')].map((select) => [Number(select.dataset.personId), select.value]));
+    const continuityByPerson = new Map([...document.querySelectorAll('.continuity-correction')].map((select) => [Number(select.dataset.personId), select.value]));
+    for (const observation of observations) {
+      if (roleByPerson.has(Number(observation.personId))) observation.role = roleByPerson.get(Number(observation.personId));
+      if (continuityByPerson.has(Number(observation.personId))) observation.continuity = continuityByPerson.get(Number(observation.personId));
+    }
     const assumptions = document.querySelector('#evidence-assumptions').value.split('\n').map((value) => value.trim()).filter(Boolean);
-    const response = await fetch(`/api/analysis/${analysisState.analysis.id}/review`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ topology: document.querySelector('#evidence-topology').value, baselinePositions: Number(document.querySelector('#evidence-baseline').value), zones, observations, assumptions, assumedArrivals: [{ id: 'assumed-1', arrivalTime: 0, serviceDuration: 5 }, { id: 'assumed-2', arrivalTime: 1, serviceDuration: 5 }, { id: 'assumed-3', arrivalTime: 2, serviceDuration: 5 }] }) });
+    const response = await fetch(`/api/analysis/${analysisState.analysis.id}/review`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ topology: document.querySelector('#evidence-topology').value, baselinePositions: Number(document.querySelector('#evidence-baseline').value), initialState: { kind: 'empty', source: { kind: 'assumption', reason: 'The clip does not show the queue at the start.' } }, zones, observations, assumptions, assumedArrivals: [{ id: 'assumed-1', arrivalTime: 0, serviceDuration: 5 }, { id: 'assumed-2', arrivalTime: 1, serviceDuration: 5 }, { id: 'assumed-3', arrivalTime: 2, serviceDuration: 5 }] }) });
     const body = await response.json();
     if (!response.ok) throw new Error(body.error || 'Evidence review could not be saved.');
     showReview(body.review);

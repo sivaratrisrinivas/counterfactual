@@ -77,7 +77,12 @@ function normalizeEvidenceReview(value) {
   const status = ['qualified-observations', 'exploratory-assumptions-required'].includes(value.evidenceStatus)
     ? value.evidenceStatus
     : 'exploratory-assumptions-required';
-  return { analysisId: value.analysisId, reviewVersion: value.reviewVersion, evidenceStatus: status };
+  if (value.inputFingerprint !== undefined && typeof value.inputFingerprint !== 'string') throw new WorkflowError('Evidence review input fingerprint is invalid.');
+  return { analysisId: value.analysisId, reviewVersion: value.reviewVersion, evidenceStatus: status, inputFingerprint: value.inputFingerprint ?? null };
+}
+
+function modelInputFingerprint(input) {
+  return JSON.stringify({ baselinePositions: input.baselinePositions, arrivals: input.arrivals, initialState: { kind: input.initialState.kind } });
 }
 
 function uniqueSorted(values) {
@@ -138,9 +143,13 @@ export function simulate(modelInput, positions) {
 
 export class ModelWorkflow {
   #models = new Map();
+  #evidenceReviews;
+
+  constructor({ evidenceReviews = new Map() } = {}) { this.#evidenceReviews = evidenceReviews; }
 
   create(input) {
     const normalized = normalizeModelInput(input);
+    normalized.evidenceReview = this.#trustedEvidence(normalized.evidenceReview, normalized);
     const model = {
       id: randomUUID(),
       version: 1,
@@ -161,6 +170,7 @@ export class ModelWorkflow {
   update(id, input) {
     const current = this.#getMutable(id);
     const normalized = normalizeModelInput(input);
+    normalized.evidenceReview = this.#trustedEvidence(normalized.evidenceReview, normalized);
     const next = {
       ...current,
       ...normalized,
@@ -228,6 +238,21 @@ export class ModelWorkflow {
     const model = this.#models.get(id);
     if (!model) throw new WorkflowError('Model was not found.', 404);
     return model;
+  }
+
+  #trustedEvidence(summary, normalized) {
+    if (!summary) return null;
+    const key = `${summary.analysisId}:${summary.reviewVersion}`;
+    const trusted = this.#evidenceReviews.get(key);
+    if (!trusted) throw new WorkflowError('Evidence review is not trusted by this server. Review the analysis before saving model inputs.', 409);
+    const evidence = structuredClone(trusted);
+    const trustedFingerprint = trusted.proposedModelInputs?.evidenceReview?.inputFingerprint;
+    if (!trustedFingerprint || trustedFingerprint !== modelInputFingerprint(normalized)) {
+      evidence.evidenceStatus = 'exploratory-assumptions-required';
+      evidence.editedAfterEvidenceReview = true;
+      evidence.assumptions = [...(evidence.assumptions ?? []), 'Model timings or arrivals were edited after evidence review and are treated as assumptions.'];
+    }
+    return evidence;
   }
 
   #view(model) {

@@ -44,10 +44,16 @@ async function serveStatic(response, pathname) {
   return true;
 }
 
-export function createApplication({ staffingProvider } = {}) {
-  const workflow = new ModelWorkflow();
+export function createApplication({ staffingProvider, analysisSource } = {}) {
+  const evidenceReviews = new Map();
+  const source = analysisSource ?? (async (analysisId) => {
+    const analysis = await loadPreparedAnalysis();
+    if (analysis.id !== analysisId) throw new AnalysisError('Analysis was not found.', 404);
+    return analysis;
+  });
+  const workflow = new ModelWorkflow({ evidenceReviews });
   const staffing = new StaffingWorkflow(workflow, { provider: staffingProvider });
-  return { workflow, staffing };
+  return { workflow, staffing, analysisSource: source, evidenceReviews };
 }
 
 export function createRequestHandler(application = createApplication()) {
@@ -56,14 +62,15 @@ export function createRequestHandler(application = createApplication()) {
     try {
       if (request.method === 'GET' && await serveStatic(response, url.pathname)) return;
       if (request.method === 'GET' && url.pathname === '/api/analysis/prepared') {
-        sendJson(response, 200, { analysis: await loadPreparedAnalysis() });
+        sendJson(response, 200, { analysis: await application.analysisSource('prepared-pexels-checkout-36s') });
         return;
       }
       const analysisReview = url.pathname.match(/^\/api\/analysis\/([^/]+)\/review$/);
       if (request.method === 'POST' && analysisReview) {
-        const analysis = await loadPreparedAnalysis();
-        if (analysisReview[1] !== analysis.id) throw new AnalysisError('Analysis was not found.', 404);
-        sendJson(response, 200, { review: reviewAnalysis(analysis, await readJson(request)) });
+        const analysis = await application.analysisSource(analysisReview[1]);
+        const review = reviewAnalysis(analysis, await readJson(request));
+        application.evidenceReviews.set(`${review.analysisId}:${review.reviewVersion}`, review);
+        sendJson(response, 200, { review });
         return;
       }
       const match = url.pathname.match(/^\/api\/models(?:\/([^/]+)(?:\/(review|compare|staffing\/interpret|staffing\/confirm))?)?$/);

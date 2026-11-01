@@ -20,7 +20,7 @@ function validReference(reference, name) {
   if (!isRecord(reference)) throw new AnalysisError(`${name} must retain its evidence reference.`);
   const kind = requiredString(reference.kind, `${name}.kind`);
   if (!['video', 'assumption', 'unsupported'].includes(kind)) throw new AnalysisError(`${name}.kind is not supported.`);
-  if (kind === 'video' && (!finite(reference.startSeconds) || reference.startSeconds < 0 || (reference.endSeconds !== undefined && reference.endSeconds < reference.startSeconds))) throw new AnalysisError(`${name} has an invalid video interval.`);
+  if (kind === 'video' && (!finite(reference.startSeconds) || reference.startSeconds < 0 || (reference.endSeconds !== undefined && (!finite(reference.endSeconds) || reference.endSeconds < reference.startSeconds)))) throw new AnalysisError(`${name} has an invalid video interval.`);
   if (kind === 'assumption') requiredString(reference.reason, `${name}.reason`);
   return { ...reference, kind };
 }
@@ -48,7 +48,14 @@ function normalizeEvent(event, index, durationSeconds) {
   if (!isRecord(event)) throw new AnalysisError(`Candidate event ${index + 1} must be an object.`);
   const type = requiredString(event.type, `Candidate event ${index + 1}.type`);
   if (!['queue-join', 'service-start', 'service-end', 'departure'].includes(type) || !finite(event.timeSeconds) || event.timeSeconds < 0 || event.timeSeconds > durationSeconds) throw new AnalysisError(`Candidate event ${index + 1} is invalid.`);
-  return { ...event, type, personId: event.personId ?? null, source: validReference(event.source, `Candidate event ${index + 1}.source`) };
+  return { ...event, type, personId: event.personId ?? null, continuity: event.continuity ?? 'unknown', role: event.role ?? 'unknown', membership: event.membership ?? 'unknown', source: validReference(event.source, `Candidate event ${index + 1}.source`) };
+}
+
+function normalizeDetectionFrames(frames, durationSeconds) {
+  const normalized = Array.isArray(frames) ? frames.map((frame, index) => normalizeDetectionFrame(frame, index, durationSeconds)) : [];
+  normalized.sort((left, right) => left.frameIndex - right.frameIndex);
+  for (let index = 1; index < normalized.length; index += 1) if (normalized[index].frameIndex === normalized[index - 1].frameIndex) throw new AnalysisError(`Detection frame ${normalized[index].frameIndex} is duplicated.`);
+  return normalized;
 }
 
 export function validateAnalysis(input) {
@@ -58,10 +65,10 @@ export function validateAnalysis(input) {
   const analysis = {
     schemaVersion: ANALYSIS_SCHEMA_VERSION,
     id: requiredString(input.id, 'Analysis id'),
-    status: ['saved', 'fresh', 'failed'].includes(input.status) ? input.status : 'fresh',
+    status: ['saved', 'fresh', 'failed', 'synthetic'].includes(input.status) ? input.status : 'fresh',
     clip: { id: requiredString(input.clip.id, 'clip.id'), filename: requiredString(input.clip.filename, 'clip.filename'), durationSeconds, width: input.clip.width, height: input.clip.height, sourceUrl: requiredString(input.clip.sourceUrl, 'clip.sourceUrl'), licenseUrl: requiredString(input.clip.licenseUrl, 'clip.licenseUrl'), attribution: requiredString(input.clip.attribution, 'clip.attribution') },
     provenance: { analysisMode: requiredString(input.provenance?.analysisMode, 'provenance.analysisMode'), savedAt: requiredString(input.provenance?.savedAt, 'provenance.savedAt'), processedFps: input.provenance?.processedFps, processedFrameCount: input.provenance?.processedFrameCount, models: { segmentation: requiredString(input.provenance?.models?.segmentation, 'segmentation model'), interpretation: requiredString(input.provenance?.models?.interpretation, 'interpretation model') } },
-    detections: Array.isArray(input.detections) ? input.detections.map((frame, index) => normalizeDetectionFrame(frame, index, durationSeconds)) : [],
+    detections: normalizeDetectionFrames(input.detections, durationSeconds),
     candidateZones: Array.isArray(input.candidateZones) ? input.candidateZones.map((zone, index) => normalizeZone(zone, `candidateZones[${index}]`)) : [],
     candidateEvents: Array.isArray(input.candidateEvents) ? input.candidateEvents.map((event, index) => normalizeEvent(event, index, durationSeconds)) : [],
     limitations: Array.isArray(input.limitations) ? input.limitations.map((value, index) => requiredString(value, `limitations[${index}]`)) : [],
@@ -81,19 +88,40 @@ export function parseSamOutput(text, { processedFps, durationSeconds }) {
     let match; while ((match = pattern.exec(line))) people.push({ id: Number(match[1]), box: { x1: Number(match[2]), y1: Number(match[3]), x2: Number(match[4]), y2: Number(match[5]), width: Number(match[6]), height: Number(match[7]) }, role: 'unknown', membership: 'unknown' });
     const frameIndex = Number(marker[1]); if (frameIndex / processedFps <= durationSeconds) frames.push({ frameIndex, timeSeconds: frameIndex / processedFps, people });
   }
-  return frames;
+  frames.sort((left, right) => left.frameIndex - right.frameIndex);
+  return frames.filter((frame, index) => index === 0 || frame.frameIndex !== frames[index - 1].frameIndex);
 }
 
 export function reviewAnalysis(analysis, corrections = {}) {
   const normalized = validateAnalysis(analysis);
+  if (!isRecord(corrections.initialState) || corrections.initialState.kind !== 'empty') throw new AnalysisError('Choose the explicit empty queue and idle positions initial state before reviewing.');
+  if (corrections.topology !== 'single-shared-queue') throw new AnalysisError('Confirm the supported one shared queue topology before reviewing.');
   const baselinePositions = corrections.baselinePositions;
   if (!Number.isInteger(baselinePositions) || baselinePositions < 1 || baselinePositions > 32) throw new AnalysisError('Reviewed baseline positions must be a positive integer from 1 to 32.');
   const observations = Array.isArray(corrections.observations) ? corrections.observations.map((event, index) => normalizeEvent(event, index, normalized.clip.durationSeconds)) : normalized.candidateEvents;
-  const byPerson = new Map(); for (const event of observations) { if (event.personId === null) continue; if (!byPerson.has(event.personId)) byPerson.set(event.personId, []); byPerson.get(event.personId).push(event); }
+  const isExcluded = (event) => ['staff', 'background'].includes(event.role) || event.membership === 'excluded';
+  const excludedObservations = observations.filter(isExcluded).map((event) => ({ personId: event.personId, type: event.type, reason: 'staff-or-background-excluded', source: event.source }));
+  const byPerson = new Map(); for (const event of observations) { if (event.personId === null || isExcluded(event)) continue; if (!byPerson.has(event.personId)) byPerson.set(event.personId, []); byPerson.get(event.personId).push(event); }
   const completeWaits = []; const incompleteCases = [];
-  for (const [personId, events] of byPerson) { const join = events.find((event) => event.type === 'queue-join'); const start = events.find((event) => event.type === 'service-start'); if (join && start) completeWaits.push({ personId, queueJoinSeconds: join.timeSeconds, serviceStartSeconds: start.timeSeconds, waitingTimeSeconds: start.timeSeconds - join.timeSeconds, source: join.source }); else incompleteCases.push({ personId, reason: join ? 'service-start-not-visible' : 'queue-join-not-visible', source: (join ?? start)?.source ?? { kind: 'unsupported' } }); }
+  const serviceDurations = [];
+  for (const [personId, events] of byPerson) {
+    const join = events.find((event) => event.type === 'queue-join');
+    const start = events.find((event) => event.type === 'service-start');
+    const end = events.find((event) => event.type === 'service-end' || event.type === 'departure');
+    const reviewedCustomer = join?.role === 'customer' && start?.role === 'customer';
+    const videoSupported = join?.source.kind === 'video' && start?.source.kind === 'video';
+    const traceable = reviewedCustomer && videoSupported && join.continuity === 'continuous' && start.continuity === 'continuous';
+    const ordered = join && start && start.timeSeconds >= join.timeSeconds;
+    if (!normalized.qualification.calibrationEligible) incompleteCases.push({ personId, reason: 'clip-insufficient-for-calibration', source: (join ?? start)?.source ?? { kind: 'unsupported' } });
+    else if (traceable && ordered) completeWaits.push({ personId, queueJoinSeconds: join.timeSeconds, serviceStartSeconds: start.timeSeconds, waitingTimeSeconds: start.timeSeconds - join.timeSeconds, source: { start: join.source, end: start.source } });
+    else incompleteCases.push({ personId, reason: !join ? 'queue-join-not-visible' : !start ? 'service-start-not-visible' : !ordered ? 'event-order-invalid' : !reviewedCustomer ? 'person-role-not-reviewed' : !videoSupported ? 'observation-not-video-supported' : 'identity-continuity-not-supported', source: (join ?? start)?.source ?? { kind: 'unsupported' } });
+    if (start?.role === 'customer' && end?.role === 'customer' && start?.source.kind === 'video' && end?.source.kind === 'video' && start.continuity === 'continuous' && end.continuity === 'continuous' && end.timeSeconds > start.timeSeconds) serviceDurations.push({ personId, serviceStartSeconds: start.timeSeconds, serviceEndSeconds: end.timeSeconds, serviceDurationSeconds: end.timeSeconds - start.timeSeconds, source: { start: start.source, end: end.source } });
+  }
   const evidenceStatus = normalized.qualification.calibrationEligible ? 'qualified-observations' : 'exploratory-assumptions-required';
-  return { analysisId: normalized.id, analysisStatus: normalized.status, reviewVersion: 1, reviewedAt: new Date().toISOString(), topology: corrections.topology ?? 'single-shared-queue', zones: Array.isArray(corrections.zones) && corrections.zones.length ? corrections.zones.map((zone, index) => normalizeZone(zone, `reviewed zones[${index}]`)) : normalized.candidateZones, observations, roleExclusions: corrections.roleExclusions ?? ['staff', 'background pedestrians', 'people already receiving service'], completeWaits, incompleteCases, completeWaitCount: completeWaits.length, completeWaitMeanSeconds: completeWaits.length ? completeWaits.reduce((sum, item) => sum + item.waitingTimeSeconds, 0) / completeWaits.length : null, limitations: [...normalized.limitations], assumptions: corrections.assumptions ?? [], evidenceStatus, calibrationStatus: normalized.qualification.calibrationEligible ? 'calibration-eligible-pending-review' : 'insufficient-for-calibration', qualification: normalized.qualification, proposedModelInputs: { baselinePositions, arrivals: corrections.assumedArrivals ?? [], initialState: corrections.initialState ?? { kind: 'empty', source: { kind: 'assumption', reason: 'Initial conditions were not visible in the clip.' } }, evidenceReview: { analysisId: normalized.id, reviewVersion: 1, evidenceStatus } } };
+  const assumptions = corrections.assumptions ?? [];
+  const proposedArrivals = corrections.assumedArrivals ?? [];
+  const inputFingerprint = JSON.stringify({ baselinePositions, arrivals: proposedArrivals, initialState: { kind: 'empty' } });
+  return { analysisId: normalized.id, analysisStatus: normalized.status, reviewVersion: 1, reviewedAt: new Date().toISOString(), topology: corrections.topology ?? 'single-shared-queue', zones: Array.isArray(corrections.zones) && corrections.zones.length ? corrections.zones.map((zone, index) => normalizeZone(zone, `reviewed zones[${index}]`)) : normalized.candidateZones, observations, excludedObservations, roleExclusions: corrections.roleExclusions ?? ['staff', 'background pedestrians', 'people already receiving service'], completeWaits, incompleteCases, serviceDurations, completeWaitCount: completeWaits.length, completeWaitMeanSeconds: completeWaits.length ? completeWaits.reduce((sum, item) => sum + item.waitingTimeSeconds, 0) / completeWaits.length : null, limitations: [...normalized.limitations], assumptions, evidenceStatus, calibrationStatus: normalized.qualification.calibrationEligible ? 'calibration-eligible-pending-review' : 'insufficient-for-calibration', qualification: normalized.qualification, proposedModelInputs: { baselinePositions, arrivals: proposedArrivals, initialState: corrections.initialState, evidenceReview: { analysisId: normalized.id, reviewVersion: 1, evidenceStatus, inputFingerprint } } };
 }
 
 let preparedAnalysisPromise;
