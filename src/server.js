@@ -7,6 +7,7 @@ import { AnalysisError, loadPreparedAnalysis, reviewAnalysis } from './analysis.
 
 const publicDirectory = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'public');
 const contentTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.mp4': 'video/mp4' };
+const staticFiles = new Set(['index.html', 'app.js', 'evidence.js', 'playback.js', 'styles.css', 'media/prepared-checkout.mp4']);
 
 function sendJson(response, status, body) {
   const payload = JSON.stringify(body);
@@ -30,7 +31,7 @@ async function readJson(request) {
 
 async function serveStatic(response, pathname) {
   const relative = pathname === '/' ? 'index.html' : pathname.slice(1);
-  if (!['index.html', 'app.js', 'styles.css', 'evidence.js', 'media/prepared-checkout.mp4'].includes(relative)) return false;
+  if (!staticFiles.has(relative)) return false;
   try {
     const content = await readFile(join(publicDirectory, relative));
     response.writeHead(200, { 'content-type': contentTypes[extname(relative)] });

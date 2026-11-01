@@ -146,3 +146,21 @@ test('identical staffing and sparse arrivals report no improvement without a per
     assert.match(comparison.body.comparison.relativeChangeNote, /zero|not shown/i);
   });
 });
+
+test('the browser workflow exposes the computed playback surface', async () => {
+  await withServer(async (base) => {
+    const page = await fetch(`${base}/`);
+    const markup = await page.text();
+    assert.equal(page.status, 200);
+    assert.match(markup, /id="playback-section"/);
+    assert.match(markup, /id="playback-time"/);
+    assert.match(markup, /id="playback-toggle"/);
+
+    const playback = await fetch(`${base}/playback.js`);
+    const moduleSource = await playback.text();
+    assert.equal(playback.status, 200);
+    assert.match(moduleSource, /renderPlayback/);
+    assert.match(moduleSource, /service-start/);
+    assert.match(moduleSource, /queueLengthTimeline/);
+  });
+});

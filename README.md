@@ -18,7 +18,7 @@ Open http://127.0.0.1:3000. Enter the baseline service positions and finite arri
 npm test
 ```
 
-The tests exercise the public HTTP workflow. They cover review and stale-edit rules, invalid inputs, the deterministic one-position/two-position comparison, identical staffing, and zero-wait comparisons.
+The tests exercise the public HTTP workflow. They cover review and stale-edit rules, invalid inputs, the deterministic one-position/two-position comparison, identical staffing, zero-wait comparisons, and the browser playback surface. The result view has one shared clock with play, pause, replay, and time seeking controls; the schematic is driven by the returned event timelines.
 
 ## Workflow API
 
